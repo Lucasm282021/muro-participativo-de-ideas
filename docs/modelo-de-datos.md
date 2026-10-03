@@ -72,6 +72,7 @@ Vincula cada idea con el participante que la envió. Solo el organizador dueño 
 - Las tablas tienen RLS activado; los permisos SQL y las políticas RLS se definen juntos en la migración.
 - Cualquier visitante puede leer campos públicos de actividades abiertas o cerradas, y solo ideas publicadas de esas actividades.
 - El organizador puede consultar y administrar sus actividades, ver los datos de sus participantes, moderar y eliminar ideas.
+- El organizador puede eliminar una actividad propia. Las claves foráneas con `ON DELETE CASCADE` eliminan también las ideas, los participantes y los vínculos de autoría; la app no tiene recuperación para esta operación.
 - Las escrituras de participantes, ideas y autoría pasan por la función `submit_idea`, invocada desde una Server Action. La función registra los datos de forma atómica y devuelve solo el estado e ID de la idea; no expone la clave `service_role`.
 - Una idea solo se puede insertar mientras la actividad está abierta. La base de datos aplica el modo vigente: `published` en automático y `pending` con aprobación.
 - Cambiar el modo afecta las ideas nuevas. Las ideas que ya estaban pendientes siguen pendientes hasta que el organizador las revise.
@@ -81,5 +82,8 @@ Vincula cada idea con el participante que la envió. Solo el organizador dueño 
 ## Migración y pantallas
 
 - `20261002120000_submit_idea_rpc.sql` agrega la función que recibe el código público, los datos del participante y el texto de la idea.
-- `/panel` permite crear actividades y revisar el historial. `/panel/actividad/[id]` muestra participantes solo al organizador y permite moderar ideas, cambiar el modo de publicación y cerrar o reabrir la actividad.
+- `/panel` permite crear actividades y revisar el historial. `/panel/actividad/[id]` muestra participantes solo al organizador y permite moderar ideas, cambiar el modo de publicación, cerrar o reabrir la actividad y eliminarla.
 - `/a/[code]` es el formulario móvil para participar. `/muro/[code]` es la pantalla pública con QR y actualización en tiempo real.
+- Los organizadores usan `/crear-cuenta` y `/ingresar`. `/recuperar-contrasena`, `/auth/callback` y `/restablecer-contrasena` implementan el flujo de recuperación de contraseña de Supabase Auth.
+
+El alcance del MVP y sus límites de seguridad y despliegue están descritos en [arquitectura.md](arquitectura.md) y [despliegue.md](despliegue.md).
