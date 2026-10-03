@@ -2,6 +2,7 @@
 
 import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -47,13 +48,85 @@ export async function signUpAction(
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp(parsed.data);
-  if (error)
+  if (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("Supabase signup failed:", {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      return {
+        error: `Supabase rechazó el registro (${error.code ?? error.status ?? "error"}): ${error.message}`,
+      };
+    }
     return { error: "No se pudo crear la cuenta. Probá con otro email." };
+  }
   if (!data.session)
     return {
       success: "Cuenta creada. Revisá tu email para confirmar el acceso.",
     };
   redirect("/panel");
+}
+
+export async function requestPasswordResetAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = z.email("Ingresá un email válido.").max(254).safeParse(
+    formData.get("email"),
+  );
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const headerStore = await headers();
+  const origin = headerStore.get("origin") ?? "http://localhost:3000";
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: new URL(
+      "/auth/callback?next=/restablecer-contrasena",
+      origin,
+    ).toString(),
+  });
+
+  if (error)
+    return {
+      error: "No pudimos enviar el enlace. Revisá la configuración de Auth e intentá de nuevo.",
+    };
+
+  return {
+    success:
+      "Si existe una cuenta con ese email, recibirás un enlace para cambiar la contraseña.",
+  };
+}
+
+export async function updatePasswordAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = z
+    .string()
+    .min(8, "La contraseña debe tener al menos 8 caracteres.")
+    .max(72)
+    .safeParse(formData.get("password"));
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user)
+    return {
+      error: "El enlace venció o ya fue utilizado. Solicitá uno nuevo.",
+    };
+
+  const { error } = await supabase.auth.updateUser({ password: parsed.data });
+  if (error)
+    return {
+      error: "No pudimos cambiar la contraseña. Solicitá un enlace nuevo e intentá otra vez.",
+    };
+
+  revalidatePath("/", "layout");
+  redirect("/ingresar?password-updated=1");
 }
 
 export async function signOutAction() {
@@ -221,4 +294,36 @@ export async function toggleActivityAction(formData: FormData) {
     .eq("id", activityId.data);
   revalidatePath("/panel");
   revalidatePath(`/panel/actividad/${activityId.data}`);
+}
+
+export async function deleteActivityAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const activityId = z.uuid().safeParse(formData.get("activity_id"));
+  if (!activityId.success)
+    return { error: "La actividad seleccionada no es válida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/ingresar");
+
+  const { data, error } = await supabase
+    .from("activities")
+    .delete()
+    .eq("id", activityId.data)
+    .eq("owner_id", user.id)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data)
+    return {
+      error:
+        "No pudimos eliminar la charla. Actualizá la página e intentá de nuevo.",
+    };
+
+  revalidatePath("/panel");
+  redirect("/panel");
 }

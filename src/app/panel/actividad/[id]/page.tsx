@@ -7,6 +7,7 @@ import {
   toggleActivityAction,
 } from "@/app/actions";
 import { createClient } from "@/lib/supabase/server";
+import { DeleteActivityButton } from "@/components/delete-activity-button";
 import type { Activity, Idea } from "@/lib/types";
 
 export default async function ActivityDetailPage({
@@ -104,6 +105,10 @@ export default async function ActivityDetailPage({
             >
               Abrir muro ↗
             </Link>
+            <DeleteActivityButton
+              activityId={id}
+              activityTitle={activity.title}
+            />
           </div>
         </div>
         <form action={setModerationModeAction} className="mode-change-strip">

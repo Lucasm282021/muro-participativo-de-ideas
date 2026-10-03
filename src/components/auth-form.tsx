@@ -51,6 +51,11 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
               required
             />
           </label>
+          {!isSignUp && (
+            <div className="auth-switch">
+              <Link href="/recuperar-contrasena">¿Olvidaste tu contraseña?</Link>
+            </div>
+          )}
           {state.error && (
             <p className="form-message error-message" role="alert">
               {state.error}
