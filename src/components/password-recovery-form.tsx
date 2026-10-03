@@ -7,6 +7,7 @@ import {
   requestPasswordResetAction,
   updatePasswordAction,
 } from "@/app/actions";
+import { PasswordInput } from "@/components/password-input";
 
 function AuthShell({
   title,
@@ -99,13 +100,11 @@ export function UpdatePasswordForm() {
       <form action={formAction} className="stack-form">
         <label>
           Nueva contraseña
-          <input
+          <PasswordInput
             autoComplete="new-password"
             name="password"
-            type="password"
             minLength={8}
             maxLength={72}
-            required
           />
         </label>
         {state.error && (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { signInAction, signUpAction } from "@/app/actions";
+import { PasswordInput } from "@/components/password-input";
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const isSignUp = mode === "sign-up";
@@ -42,13 +43,11 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           </label>
           <label>
             Contraseña
-            <input
+            <PasswordInput
               autoComplete={isSignUp ? "new-password" : "current-password"}
               name="password"
-              type="password"
               placeholder="Al menos 8 caracteres"
               minLength={8}
-              required
             />
           </label>
           {!isSignUp && (

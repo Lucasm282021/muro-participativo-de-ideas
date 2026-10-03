@@ -584,6 +584,33 @@ textarea:focus-visible {
 .stack-form textarea::placeholder {
   color: #a1a49d;
 }
+.password-input-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.stack-form .password-input-wrap input:not([type="radio"]) {
+  padding-right: 78px;
+}
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: #4f7547;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.password-visibility-toggle svg {
+  width: 18px;
+  height: 18px;
+}
 .stack-form textarea {
   resize: vertical;
   line-height: 1.55;
