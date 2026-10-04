@@ -23,11 +23,7 @@ export function DeleteActivityButton({
       }}
     >
       <input type="hidden" name="activity_id" value={activityId} />
-      <button
-        type="submit"
-        className="button button-danger"
-        disabled={pending}
-      >
+      <button type="submit" className="button button-danger" disabled={pending}>
         {pending ? "Eliminando…" : "Eliminar charla"}
       </button>
       {state.error && (

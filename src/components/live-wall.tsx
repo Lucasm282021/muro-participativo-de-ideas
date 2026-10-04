@@ -109,7 +109,20 @@ export function LiveWall({
           <p>Escaneá el código con tu celular para dejar una idea.</p>
           {joinUrl && (
             <div className="qr-frame">
-              <QRCodeSVG value={joinUrl} size={144} level="M" includeMargin />
+              <QRCodeSVG
+                value={joinUrl}
+                size={144}
+                level="H"
+                marginSize={4}
+                title="Código QR para participar"
+                imageSettings={{
+                  src: "/muro-mark.svg",
+                  width: 28,
+                  height: 28,
+                  excavate: true,
+                  crossOrigin: "anonymous",
+                }}
+              />
             </div>
           )}
           <div className="join-code">

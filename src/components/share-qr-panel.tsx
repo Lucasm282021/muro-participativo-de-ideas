@@ -1,0 +1,166 @@
+"use client";
+
+import { QRCodeCanvas } from "qrcode.react";
+import { useState } from "react";
+import { toggleActivityAction } from "@/app/actions";
+
+type ShareQrPanelProps = {
+  joinUrl: string;
+  activityId: string;
+  participantCount: number;
+  ideaCount: number;
+  isOpen: boolean;
+};
+
+export function ShareQrPanel({
+  joinUrl,
+  activityId,
+  participantCount,
+  ideaCount,
+  isOpen,
+}: ShareQrPanelProps) {
+  const [status, setStatus] = useState("Compartir enlace");
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      setStatus("Enlace copiado");
+      window.setTimeout(() => setStatus("Compartir enlace"), 1800);
+    } catch {
+      setStatus("No se pudo copiar");
+      window.setTimeout(() => setStatus("Compartir enlace"), 1800);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Participá en la actividad",
+          text: "Participá en esta actividad y compartí tu idea.",
+          url: joinUrl,
+        });
+        setStatus("Compartido");
+        window.setTimeout(() => setStatus("Compartir enlace"), 1800);
+        return;
+      }
+      await handleCopyLink();
+    } catch {
+      setStatus("No se pudo compartir");
+      window.setTimeout(() => setStatus("Compartir enlace"), 1800);
+    }
+  };
+
+  const handleDownload = () => {
+    const canvas = document.getElementById(
+      "share-participation-qr",
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    try {
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = "qr-participacion.png";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setStatus("QR PNG descargado");
+    } catch {
+      setStatus("No se pudo descargar el QR");
+    }
+    window.setTimeout(() => setStatus("Compartir enlace"), 1800);
+  };
+
+  return (
+    <section
+      className="share-qr-panel"
+      aria-label="Compartir QR para participar"
+    >
+      <div className="section-header">
+        <div>
+          <span className="section-kicker">INVITAR A PARTICIPAR</span>
+          <h2>Compartí el acceso</h2>
+        </div>
+      </div>
+      <div className="share-qr-box">
+        <div className="share-qr-info">
+          <div className="share-qr-url">
+            <span>ENLACE PARA PARTICIPAR</span>
+            <strong>{new URL(joinUrl).pathname}</strong>
+          </div>
+          <p>
+            Escaneá el QR o compartí el enlace para abrir el formulario y enviar
+            una idea.
+          </p>
+          <div className="share-qr-actions">
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={handleShare}
+            >
+              {status}
+            </button>
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={handleCopyLink}
+            >
+              Copiar enlace
+            </button>
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={handleDownload}
+            >
+              Descargar QR
+            </button>
+          </div>
+        </div>
+        <div className="share-qr-frame">
+          <QRCodeCanvas
+            id="share-participation-qr"
+            className="share-qr-code"
+            value={joinUrl}
+            size={256}
+            style={{ width: 138, height: 138 }}
+            level="H"
+            marginSize={4}
+            imageSettings={{
+              src: "/muro-mark.svg",
+              width: 48,
+              height: 48,
+              excavate: true,
+              crossOrigin: "anonymous",
+            }}
+          />
+        </div>
+        <div className="share-qr-summary">
+          <div>
+            <span>PARTICIPANTES</span>
+            <strong>{participantCount}</strong>
+          </div>
+          <div>
+            <span>IDEAS</span>
+            <strong>{ideaCount}</strong>
+          </div>
+          <form action={toggleActivityAction}>
+            <input type="hidden" name="activity_id" value={activityId} />
+            <input
+              type="hidden"
+              name="status"
+              value={isOpen ? "closed" : "open"}
+            />
+            <button
+              type="submit"
+              className={
+                isOpen ? "button button-danger" : "button button-primary"
+              }
+            >
+              {isOpen ? "Dejar de recibir ideas" : "Volver a recibir ideas"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}

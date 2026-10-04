@@ -56,16 +56,15 @@ export function RequestPasswordResetForm() {
       description="Te enviaremos un enlace para elegir una contraseña nueva."
     >
       <form action={formAction} className="stack-form">
-        <label>
-          Email
-          <input
-            autoComplete="email"
-            name="email"
-            type="email"
-            placeholder="vos@organizacion.com"
-            required
-          />
-        </label>
+        <label htmlFor="email">Email</label>
+        <input
+          autoComplete="email"
+          id="email"
+          name="email"
+          type="email"
+          placeholder="vos@organizacion.com"
+          required
+        />
         {state.error && (
           <p className="form-message error-message" role="alert">
             {state.error}
@@ -98,15 +97,14 @@ export function UpdatePasswordForm() {
       description="Usá al menos 8 caracteres para proteger tu cuenta."
     >
       <form action={formAction} className="stack-form">
-        <label>
-          Nueva contraseña
-          <PasswordInput
-            autoComplete="new-password"
-            name="password"
-            minLength={8}
-            maxLength={72}
-          />
-        </label>
+        <label htmlFor="password">Nueva contraseña</label>
+        <PasswordInput
+          autoComplete="new-password"
+          id="password"
+          name="password"
+          minLength={8}
+          maxLength={72}
+        />
         {state.error && (
           <p className="form-message error-message" role="alert">
             {state.error}

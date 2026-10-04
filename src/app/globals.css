@@ -199,12 +199,6 @@ textarea:focus-visible {
   font-weight: 500;
   letter-spacing: -5px;
 }
-.hero-copy h1 span {
-  font-family: Georgia, serif;
-  font-style: italic;
-  color: #719153;
-  font-weight: 400;
-}
 .hero-copy > p {
   max-width: 445px;
   margin: 0;
@@ -589,6 +583,18 @@ textarea:focus-visible {
   display: block;
   width: 100%;
 }
+.idea-form {
+  gap: 14px;
+  margin-top: 22px;
+}
+.idea-form label {
+  gap: 7px;
+}
+.idea-form input:not([type="radio"]),
+.idea-form textarea {
+  padding: 11px 12px;
+  font-size: 12px;
+}
 .stack-form .password-input-wrap input:not([type="radio"]) {
   padding-right: 78px;
 }
@@ -752,6 +758,13 @@ textarea:focus-visible {
   font-weight: 500;
   letter-spacing: -1px;
 }
+.detail-section-description {
+  max-width: 380px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
 .activity-count {
   color: #81877e;
   font-family: Georgia, serif;
@@ -789,12 +802,12 @@ textarea:focus-visible {
   gap: 6px;
   padding: 5px 8px;
   border-radius: 99px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
 }
 .status-open {
-  background: #e5f0dd;
-  color: #527447;
+  background: #315a3d;
+  color: #ffffff;
 }
 .status-closed {
   background: #ecebe4;
@@ -857,6 +870,7 @@ textarea:focus-visible {
 }
 
 .detail-main {
+  width: min(100% - 48px, 1200px);
   padding-top: 36px;
 }
 .detail-back {
@@ -898,42 +912,130 @@ textarea:focus-visible {
   min-height: 40px;
   font-size: 11px;
 }
-.share-strip {
-  display: flex;
+.detail-workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+  grid-template-areas:
+    "share moderation"
+    "participants mode";
+  align-items: stretch;
+  gap: 30px;
+  margin-top: 28px;
+}
+.share-qr-panel {
+  margin-top: 0;
+  grid-area: share;
+}
+.share-qr-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "info qr"
+    "summary summary";
+  gap: 20px;
   align-items: center;
-  gap: 35px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid #e1dfd5;
   background: #fffefa;
 }
-.share-strip > div {
+.share-qr-info {
+  grid-area: info;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 12px;
 }
-.share-strip span {
+.share-qr-url {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.share-qr-url strong {
+  color: #3e443d;
+  font-size: 12px;
+  font-weight: 600;
+}
+.share-qr-info span {
   color: #858980;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 1px;
 }
-.share-strip strong {
+.share-qr-info p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.share-qr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.share-qr-actions .button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 11px;
+  border: 1px solid #94998e;
+  background: #f1f2ed;
+  color: #252c25;
+}
+.share-qr-actions .button:hover:not(:disabled) {
+  background: #e4e8df;
+}
+.share-qr-frame {
+  grid-area: qr;
+  display: grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  border: 1px solid #e7e5df;
+  background: #ffffff;
+}
+.share-qr-code {
+  display: block;
+  max-width: 100%;
+}
+.share-qr-summary {
+  grid-area: summary;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #e7e5df;
+}
+.share-qr-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.share-qr-summary span,
+.join-question span,
+.join-code span {
+  color: #83887d;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 1.3px;
+}
+.share-qr-summary strong {
   color: #3e443d;
   font-size: 12px;
   font-weight: 600;
 }
-.share-strip form {
-  margin-left: auto;
+.share-qr-summary form {
+  margin: 0 0 0 auto;
 }
-.share-strip .button {
+.share-qr-summary .button {
   min-height: 36px;
+  padding: 0 14px;
   font-size: 10px;
 }
 .mode-change-strip {
+  align-self: start;
+  grid-area: mode;
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 0;
   padding: 14px 18px;
   border: 1px solid #e1dfd5;
   background: #f9f8f3;
@@ -956,7 +1058,8 @@ textarea:focus-visible {
   font-size: 10px;
 }
 .participants-section {
-  margin-top: 42px;
+  margin-top: 0;
+  grid-area: participants;
 }
 .participants-list {
   display: flex;
@@ -997,11 +1100,17 @@ textarea:focus-visible {
   font-size: 10px;
 }
 .moderation-section {
-  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  grid-area: moderation;
+}
+.moderation-section > .empty-activities {
+  flex: 1;
 }
 .pending-badge {
-  background: #f8eccb;
-  color: #97732d;
+  background: #604719;
+  color: #ffffff;
 }
 .moderation-list {
   display: flex;
@@ -1079,8 +1188,7 @@ textarea:focus-visible {
   border-bottom: 1px solid #d9d8ce;
 }
 .join-question span,
-.join-code span,
-.share-strip span {
+.join-code span {
   color: #83887d;
   font-size: 8px;
   font-weight: 800;
@@ -1135,18 +1243,6 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.65;
-}
-.idea-form {
-  gap: 14px;
-  margin-top: 22px;
-}
-.idea-form label {
-  gap: 7px;
-}
-.idea-form input:not([type="radio"]),
-.idea-form textarea {
-  padding: 11px 12px;
-  font-size: 12px;
 }
 .participant-fields {
   display: grid;
@@ -1210,11 +1306,14 @@ textarea:focus-visible {
 
 .wall-page {
   min-height: 100vh;
-  padding: 0 5%;
+  width: 100vw;
+  max-width: none;
+  padding: 0 18px 18px;
   background: #f4f3ed;
 }
 .wall-header {
   height: 72px;
+  padding: 0 6px;
 }
 .wall-live {
   display: flex;
@@ -1226,41 +1325,43 @@ textarea:focus-visible {
   letter-spacing: 1.3px;
 }
 .wall-intro {
-  max-width: 860px;
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
-  padding: 49px 10px 30px;
+  padding: 26px 10px 18px;
   text-align: center;
 }
 .wall-intro h1 {
   margin: 12px 0 10px;
-  font-size: clamp(35px, 5vw, 62px);
-  line-height: 1;
+  font-size: clamp(42px, 4vw, 82px);
+  line-height: 0.95;
   letter-spacing: -3px;
   font-weight: 500;
 }
 .wall-intro > p {
   margin: 0 auto;
-  max-width: 680px;
+  max-width: 760px;
   color: #70766f;
   font-family: Georgia, serif;
-  font-size: clamp(16px, 2vw, 21px);
-  line-height: 1.45;
+  font-size: clamp(18px, 1.8vw, 28px);
+  line-height: 1.35;
 }
 .wall-content {
   display: grid;
-  grid-template-columns: 1fr 220px;
-  gap: 23px;
-  max-width: 1120px;
-  margin: 0 auto;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 280px);
+  gap: 22px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  align-items: stretch;
 }
 .idea-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 13px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 .idea-card {
-  min-height: 148px;
+  min-height: 190px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1296,6 +1397,9 @@ textarea:focus-visible {
   letter-spacing: 1px;
 }
 .wall-join-card {
+  width: 100%;
+  max-width: 290px;
+  margin-left: auto;
   padding: 17px;
   border: 1px solid #dfded4;
   background: #fffefa;
@@ -1367,12 +1471,145 @@ textarea:focus-visible {
 .wall-footer {
   display: flex;
   justify-content: space-between;
-  max-width: 1120px;
-  margin: 25px auto 0;
+  width: 100%;
+  max-width: none;
+  margin: 25px 0 0;
   padding: 14px 0;
   border-top: 1px solid #deddd4;
   color: #888d83;
   font-size: 9px;
+}
+@media (min-width: 1280px) and (min-height: 1000px) {
+  .dashboard-page {
+    display: flex;
+    height: 100vh;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .dashboard-nav {
+    flex: 0 0 auto;
+  }
+  .detail-main {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px 0 18px;
+  }
+  .detail-heading {
+    margin: 16px 0 14px;
+  }
+  .mode-change-strip {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .detail-workspace {
+    min-height: 0;
+    flex: 1;
+    grid-template-rows: minmax(0, 1.32fr) minmax(0, 1fr);
+    gap: 20px;
+    overflow: hidden;
+    margin-top: 16px;
+  }
+  .share-qr-panel,
+  .participants-section,
+  .moderation-section {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .share-qr-panel,
+  .participants-section,
+  .moderation-section {
+    display: flex;
+    flex-direction: column;
+  }
+  .share-qr-panel .section-header {
+    flex: 0 0 auto;
+  }
+  .share-qr-box {
+    min-height: 0;
+    flex: 1;
+  }
+  .participants-list,
+  .moderation-list {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+@media (min-width: 1280px) and (max-height: 849px) {
+  .detail-main {
+    padding: 10px 0;
+  }
+  .detail-heading {
+    margin: 8px 0;
+  }
+  .detail-heading h1 {
+    margin: 8px 0 4px;
+    font-size: 34px;
+    letter-spacing: -1.5px;
+  }
+  .mode-change-strip {
+    padding: 8px 14px;
+  }
+  .mode-change-strip p {
+    font-size: 9px;
+  }
+  .share-qr-summary {
+    gap: 16px;
+    padding-top: 8px;
+  }
+  .detail-workspace {
+    grid-template-rows: minmax(0, 1.55fr) minmax(0, 0.7fr);
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .share-qr-box {
+    gap: 10px;
+    padding: 8px;
+  }
+  .share-qr-frame {
+    width: 148px;
+    height: 148px;
+  }
+  .participants-section .section-header,
+  .moderation-section .section-header {
+    margin-bottom: 10px;
+  }
+  .participants-section .section-header h2,
+  .moderation-section .section-header h2 {
+    margin-top: 4px;
+    font-size: 22px;
+  }
+  .detail-section-description {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    margin-top: 4px;
+    font-size: 10px;
+  }
+  .participants-section > .empty-activities,
+  .moderation-section > .empty-activities {
+    min-height: 52px;
+    font-size: 10px;
+  }
+}
+@media (min-width: 1400px) {
+  .wall-page {
+    padding: 0 26px 22px;
+  }
+  .wall-content {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  }
+  .idea-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .idea-card {
+    min-height: 230px;
+  }
 }
 @keyframes idea-in {
   from {
@@ -1433,6 +1670,23 @@ textarea:focus-visible {
     padding-left: 2%;
     padding-right: 2%;
   }
+  .detail-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .detail-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .detail-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "share"
+      "moderation"
+      "participants"
+      "mode";
+    gap: 22px;
+  }
   .wall-content {
     grid-template-columns: 1fr 190px;
     gap: 15px;
@@ -1442,6 +1696,18 @@ textarea:focus-visible {
   }
   .idea-card {
     min-height: 125px;
+  }
+}
+@media (min-width: 901px) and (max-width: 1279px) {
+  .detail-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "share"
+      "moderation"
+      "participants"
+      "mode";
+    gap: 22px;
+    margin-top: 20px;
   }
 }
 @media (max-width: 650px) {
@@ -1653,22 +1919,58 @@ textarea:focus-visible {
   .detail-actions .button {
     flex: 1;
   }
-  .share-strip {
+  .mode-change-strip {
+    align-items: stretch;
     flex-wrap: wrap;
-    gap: 16px 24px;
   }
-  .share-strip > div:first-child {
+  .mode-change-strip > div {
     width: 100%;
+    margin-right: 0;
   }
-  .share-strip form {
+  .mode-change-strip select {
+    min-width: 0;
+    flex: 1;
+  }
+  .detail-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "share"
+      "moderation"
+      "participants"
+      "mode";
+    gap: 30px;
+    margin-top: 24px;
+  }
+  .share-qr-box {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "info"
+      "qr"
+      "summary";
+  }
+  .share-qr-frame {
+    justify-self: center;
+  }
+  .share-qr-summary {
+    flex-wrap: wrap;
+    gap: 14px 24px;
+  }
+  .share-qr-summary form {
     width: 100%;
     margin: 0;
   }
-  .share-strip form button {
+  .share-qr-summary form button {
     width: 100%;
   }
+  .participant-row {
+    flex-wrap: wrap;
+  }
+  .participant-row > span:last-child {
+    width: calc(100% - 42px);
+    margin-left: 42px;
+  }
   .moderation-section {
-    margin-top: 35px;
+    margin-top: 0;
   }
   .moderation-card {
     align-items: flex-start;
@@ -1802,4 +2104,10 @@ textarea:focus-visible {
   .activity-card {
     transition: none;
   }
+}
+.hero-copy h1 span {
+  font-family: Georgia, serif;
+  font-style: italic;
+  color: #719153;
+  font-weight: 400;
 }

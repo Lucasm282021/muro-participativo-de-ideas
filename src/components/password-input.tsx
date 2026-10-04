@@ -4,6 +4,7 @@ import { useState } from "react";
 
 type PasswordInputProps = {
   autoComplete: string;
+  id?: string;
   name: string;
   placeholder?: string;
   minLength?: number;
@@ -12,6 +13,7 @@ type PasswordInputProps = {
 
 export function PasswordInput({
   autoComplete,
+  id,
   name,
   placeholder,
   minLength,
@@ -23,6 +25,7 @@ export function PasswordInput({
     <span className="password-input-wrap">
       <input
         autoComplete={autoComplete}
+        id={id}
         maxLength={maxLength}
         minLength={minLength}
         name={name}

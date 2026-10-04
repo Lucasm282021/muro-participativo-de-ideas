@@ -72,9 +72,10 @@ export async function requestPasswordResetAction(
   _previous: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const parsed = z.email("Ingresá un email válido.").max(254).safeParse(
-    formData.get("email"),
-  );
+  const parsed = z
+    .email("Ingresá un email válido.")
+    .max(254)
+    .safeParse(formData.get("email"));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   const headerStore = await headers();
@@ -89,7 +90,8 @@ export async function requestPasswordResetAction(
 
   if (error)
     return {
-      error: "No pudimos enviar el enlace. Revisá la configuración de Auth e intentá de nuevo.",
+      error:
+        "No pudimos enviar el enlace. Revisá la configuración de Auth e intentá de nuevo.",
     };
 
   return {
@@ -122,7 +124,8 @@ export async function updatePasswordAction(
   const { error } = await supabase.auth.updateUser({ password: parsed.data });
   if (error)
     return {
-      error: "No pudimos cambiar la contraseña. Solicitá un enlace nuevo e intentá otra vez.",
+      error:
+        "No pudimos cambiar la contraseña. Solicitá un enlace nuevo e intentá otra vez.",
     };
 
   revalidatePath("/", "layout");

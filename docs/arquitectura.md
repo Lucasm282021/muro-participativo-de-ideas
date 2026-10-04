@@ -62,6 +62,12 @@ La app usa `@supabase/ssr` para mantener la sesión de organizador en cookies. L
 | `/a/[code]` | Formulario público de participación. |
 | `/muro/[code]` | Proyección pública de ideas aprobadas, con QR y Realtime. |
 
+## Acceso y presentación
+
+- `/panel/actividad/[id]` agrupa en una tarjeta el enlace público, el QR, los contadores de participantes e ideas y el control para cerrar o reabrir la participación.
+- El organizador puede compartir o copiar el enlace y descargar el QR como PNG de 256 × 256 px. El PNG y el QR mostrado en el muro incluyen el isotipo `/muro-mark.svg` con corrección de error alta.
+- En pantallas de hasta 1279 px de ancho o menos de 1000 px de alto, el panel usa flujo natural y permite desplazamiento para no recortar controles. La grilla de altura fija se reserva para escritorios amplios y altos.
+
 ## Seguridad y límites
 
 - Solo existen cuentas de organizadores. Los participantes no tienen cuenta; el email no se verifica al enviar ideas.

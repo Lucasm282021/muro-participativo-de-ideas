@@ -9,6 +9,7 @@ Aplicación web adaptable para que un organizador cree actividades, reciba ideas
 - Participación sin cuenta, con nombre, apellido, email e idea.
 - Publicación automática o con aprobación del organizador.
 - Muro público con ideas aprobadas y actualización en tiempo real.
+- Acceso compartible por enlace y QR con la marca del proyecto, descargable en PNG.
 - Recuperación de contraseña por email.
 
 ## Documentación

@@ -4,10 +4,10 @@ import {
   moderateIdeaAction,
   setModerationModeAction,
   signOutAction,
-  toggleActivityAction,
 } from "@/app/actions";
-import { createClient } from "@/lib/supabase/server";
 import { DeleteActivityButton } from "@/components/delete-activity-button";
+import { ShareQrPanel } from "@/components/share-qr-panel";
+import { createClient } from "@/lib/supabase/server";
 import type { Activity, Idea } from "@/lib/types";
 
 export default async function ActivityDetailPage({
@@ -49,6 +49,10 @@ export default async function ActivityDetailPage({
   ]);
   const ideas = (rawIdeas ?? []) as Idea[];
   const pendingCount = ideas.filter((idea) => idea.status === "pending").length;
+  const joinUrl = new URL(
+    `/a/${activity.public_code}`,
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  ).toString();
 
   return (
     <main className="dashboard-page">
@@ -84,8 +88,8 @@ export default async function ActivityDetailPage({
             <div className="eyebrow">
               CÓDIGO {activity.public_code} ·{" "}
               {activity.moderation_mode === "automatic"
-                ? "PUBLICACIÓN DIRECTA"
-                : "CON APROBACIÓN"}
+                ? "PUBLICACIÓN AUTOMÁTICA"
+                : "REVISIÓN ANTES DE PUBLICAR"}
             </div>
             <h1>{activity.title}</h1>
             <p>{activity.question}</p>
@@ -111,162 +115,164 @@ export default async function ActivityDetailPage({
             />
           </div>
         </div>
-        <form action={setModerationModeAction} className="mode-change-strip">
-          <input type="hidden" name="activity_id" value={id} />
-          <div>
-            <span className="section-kicker">MODO DE PUBLICACIÓN</span>
-            <p>
-              Podés cambiarlo durante la actividad. Las ideas pendientes siguen
-              esperando revisión.
-            </p>
-          </div>
-          <select
-            name="moderation_mode"
-            defaultValue={activity.moderation_mode}
-            aria-label="Modo de publicación"
-          >
-            <option value="automatic">Publicación directa</option>
-            <option value="approval">Con aprobación</option>
-          </select>
-          <button type="submit" className="button button-quiet">
-            Guardar
-          </button>
-        </form>
-        <div className="share-strip">
-          <div>
-            <span>ENLACE PARA PARTICIPAR</span>
-            <strong>{`/a/${activity.public_code}`}</strong>
-          </div>
-          <div>
-            <span>PARTICIPANTES</span>
-            <strong>{participantCount ?? 0}</strong>
-          </div>
-          <div>
-            <span>IDEAS</span>
-            <strong>{ideas.length}</strong>
-          </div>
-          <form action={toggleActivityAction}>
+        <div className="detail-workspace">
+          <ShareQrPanel
+            joinUrl={joinUrl}
+            activityId={id}
+            participantCount={participantCount ?? 0}
+            ideaCount={ideas.length}
+            isOpen={activity.status === "open"}
+          />
+          <section className="moderation-section">
+            <div className="section-header">
+              <div>
+                <span className="section-kicker">REVISIÓN DE IDEAS</span>
+                <h2>Ideas recibidas</h2>
+              </div>
+              <span className="pending-badge">{pendingCount} por revisar</span>
+            </div>
+            {ideas.length ? (
+              <div className="moderation-list">
+                {ideas.map((idea) => (
+                  <article className="moderation-card" key={idea.id}>
+                    <div className="moderation-card-content">
+                      <span className={`idea-status status-${idea.status}`}>
+                        {idea.status === "pending"
+                          ? "Por revisar"
+                          : idea.status === "published"
+                            ? "En el muro"
+                            : "Oculta del muro"}
+                      </span>
+                      <p>{idea.content}</p>
+                      <time>
+                        {new Intl.DateTimeFormat("es-AR", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(idea.created_at))}
+                      </time>
+                    </div>
+                    {activity.moderation_mode === "approval" && (
+                      <div className="moderation-actions">
+                        {idea.status !== "published" && (
+                          <form action={moderateIdeaAction}>
+                            <input
+                              type="hidden"
+                              name="activity_id"
+                              value={id}
+                            />
+                            <input
+                              type="hidden"
+                              name="idea_id"
+                              value={idea.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="status"
+                              value="published"
+                            />
+                            <button
+                              type="submit"
+                              className="button button-approve"
+                            >
+                              Mostrar en el muro
+                            </button>
+                          </form>
+                        )}
+                        {idea.status !== "hidden" && (
+                          <form action={moderateIdeaAction}>
+                            <input
+                              type="hidden"
+                              name="activity_id"
+                              value={id}
+                            />
+                            <input
+                              type="hidden"
+                              name="idea_id"
+                              value={idea.id}
+                            />
+                            <input type="hidden" name="status" value="hidden" />
+                            <button
+                              type="submit"
+                              className="button button-quiet"
+                            >
+                              Ocultar del muro
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-activities">
+                <span>✳</span>
+                <p>
+                  Todavía no hay ideas. Cuando alguien envíe una, vas a verla
+                  acá junto con su estado.
+                </p>
+              </div>
+            )}
+          </section>
+          <section className="participants-section">
+            <div className="section-header">
+              <div>
+                <span className="section-kicker">DATOS DE CONTACTO</span>
+                <h2>Participantes</h2>
+                <p className="detail-section-description">
+                  Solo vos ves sus nombres y correos; las ideas aparecen sin
+                  autor en el muro.
+                </p>
+              </div>
+            </div>
+            {participants?.length ? (
+              <div className="participants-list">
+                {participants.map((participant) => (
+                  <article className="participant-row" key={participant.email}>
+                    <span className="participant-avatar">
+                      {participant.first_name.slice(0, 1)}
+                      {participant.last_name.slice(0, 1)}
+                    </span>
+                    <strong>
+                      {participant.first_name} {participant.last_name}
+                    </strong>
+                    <span>{participant.email}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-activities">
+                <span>◌</span>
+                <p>
+                  Todavía no hay participantes. Sus nombres y correos aparecerán
+                  acá cuando envíen una idea.
+                </p>
+              </div>
+            )}
+          </section>
+          <form action={setModerationModeAction} className="mode-change-strip">
             <input type="hidden" name="activity_id" value={id} />
-            <input
-              type="hidden"
-              name="status"
-              value={activity.status === "open" ? "closed" : "open"}
-            />
-            <button
-              type="submit"
-              className={
-                activity.status === "open"
-                  ? "button button-danger"
-                  : "button button-primary"
-              }
+            <div>
+              <span className="section-kicker">PUBLICACIÓN DE IDEAS</span>
+              <p>
+                Elegí si las ideas nuevas se publican automáticamente o esperan
+                tu aprobación. Las que ya están pendientes no cambian al
+                guardar.
+              </p>
+            </div>
+            <select
+              name="moderation_mode"
+              defaultValue={activity.moderation_mode}
+              aria-label="Modo de publicación"
             >
-              {activity.status === "open"
-                ? "Cerrar actividad"
-                : "Reabrir actividad"}
+              <option value="automatic">Publicar automáticamente</option>
+              <option value="approval">Revisar antes de publicar</option>
+            </select>
+            <button type="submit" className="button button-quiet">
+              Guardar modo
             </button>
           </form>
         </div>
-        <section className="participants-section">
-          <div className="section-header">
-            <div>
-              <span className="section-kicker">SOLO VISIBLE PARA VOS</span>
-              <h2>Participantes</h2>
-            </div>
-            <span className="activity-count">
-              {String(participantCount ?? 0).padStart(2, "0")}
-            </span>
-          </div>
-          {participants?.length ? (
-            <div className="participants-list">
-              {participants.map((participant) => (
-                <article className="participant-row" key={participant.email}>
-                  <span className="participant-avatar">
-                    {participant.first_name.slice(0, 1)}
-                    {participant.last_name.slice(0, 1)}
-                  </span>
-                  <strong>
-                    {participant.first_name} {participant.last_name}
-                  </strong>
-                  <span>{participant.email}</span>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-activities">
-              <span>◌</span>
-              <p>Los nombres y emails aparecerán cuando alguien participe.</p>
-            </div>
-          )}
-        </section>
-        <section className="moderation-section">
-          <div className="section-header">
-            <div>
-              <span className="section-kicker">MODERACIÓN</span>
-              <h2>Ideas recibidas</h2>
-            </div>
-            <span className="pending-badge">{pendingCount} pendientes</span>
-          </div>
-          {ideas.length ? (
-            <div className="moderation-list">
-              {ideas.map((idea) => (
-                <article className="moderation-card" key={idea.id}>
-                  <div className="moderation-card-content">
-                    <span className={`idea-status status-${idea.status}`}>
-                      {idea.status === "pending"
-                        ? "Pendiente"
-                        : idea.status === "published"
-                          ? "Publicada"
-                          : "Oculta"}
-                    </span>
-                    <p>{idea.content}</p>
-                    <time>
-                      {new Intl.DateTimeFormat("es-AR", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(new Date(idea.created_at))}
-                    </time>
-                  </div>
-                  {activity.moderation_mode === "approval" && (
-                    <div className="moderation-actions">
-                      {idea.status !== "published" && (
-                        <form action={moderateIdeaAction}>
-                          <input type="hidden" name="activity_id" value={id} />
-                          <input type="hidden" name="idea_id" value={idea.id} />
-                          <input
-                            type="hidden"
-                            name="status"
-                            value="published"
-                          />
-                          <button
-                            type="submit"
-                            className="button button-approve"
-                          >
-                            Publicar
-                          </button>
-                        </form>
-                      )}
-                      {idea.status !== "hidden" && (
-                        <form action={moderateIdeaAction}>
-                          <input type="hidden" name="activity_id" value={id} />
-                          <input type="hidden" name="idea_id" value={idea.id} />
-                          <input type="hidden" name="status" value="hidden" />
-                          <button type="submit" className="button button-quiet">
-                            Ocultar
-                          </button>
-                        </form>
-                      )}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-activities">
-              <span>✳</span>
-              <p>Las primeras ideas van a aparecer acá.</p>
-            </div>
-          )}
-        </section>
       </section>
     </main>
   );

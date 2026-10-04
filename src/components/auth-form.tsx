@@ -31,28 +31,28 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             : "Ingresá para continuar con tus actividades."}
         </p>
         <form action={formAction} className="stack-form">
-          <label>
-            Email
-            <input
-              autoComplete="email"
-              name="email"
-              type="email"
-              placeholder="vos@organizacion.com"
-              required
-            />
-          </label>
-          <label>
-            Contraseña
-            <PasswordInput
-              autoComplete={isSignUp ? "new-password" : "current-password"}
-              name="password"
-              placeholder="Al menos 8 caracteres"
-              minLength={8}
-            />
-          </label>
+          <label htmlFor="email">Email</label>
+          <input
+            autoComplete="email"
+            id="email"
+            name="email"
+            type="email"
+            placeholder="vos@organizacion.com"
+            required
+          />
+          <label htmlFor="password">Contraseña</label>
+          <PasswordInput
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            id="password"
+            name="password"
+            placeholder="Al menos 8 caracteres"
+            minLength={8}
+          />
           {!isSignUp && (
             <div className="auth-switch">
-              <Link href="/recuperar-contrasena">¿Olvidaste tu contraseña?</Link>
+              <Link href="/recuperar-contrasena">
+                ¿Olvidaste tu contraseña?
+              </Link>
             </div>
           )}
           {state.error && (
