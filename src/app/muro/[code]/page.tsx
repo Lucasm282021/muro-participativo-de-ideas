@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { LiveWall } from "@/components/live-wall";
+import { MAX_WALL_CARDS } from "@/lib/presentation";
+import { getBaseUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { Idea } from "@/lib/types";
 
@@ -20,7 +22,11 @@ export default async function PublicWallPage({
     .select("id, activity_id, content, status, created_at, published_at")
     .eq("activity_id", activity.id)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(MAX_WALL_CARDS);
+
+  const baseUrl = await getBaseUrl();
+  const initialJoinUrl = `${baseUrl}/a/${activity.public_code}`;
 
   return (
     <LiveWall
@@ -29,6 +35,7 @@ export default async function PublicWallPage({
       title={activity.title}
       question={activity.question}
       initialIdeas={(data ?? []) as Idea[]}
+      initialJoinUrl={initialJoinUrl}
     />
   );
 }
