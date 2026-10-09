@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getBaseUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 
 export type FormState = { error?: string; success?: string };
@@ -79,7 +80,11 @@ export async function requestPasswordResetAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   const headerStore = await headers();
-  const origin = headerStore.get("origin") ?? "http://localhost:3000";
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const proto = headerStore.get("x-forwarded-proto") ?? "https";
+  const origin =
+    headerStore.get("origin") ??
+    (host ? `${proto}://${host}` : await getBaseUrl());
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
     redirectTo: new URL(

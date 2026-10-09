@@ -1,11 +1,12 @@
 "use client";
 
 import { QRCodeCanvas } from "qrcode.react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toggleActivityAction } from "@/app/actions";
 
 type ShareQrPanelProps = {
   joinUrl: string;
+  publicCode?: string;
   activityId: string;
   participantCount: number;
   ideaCount: number;
@@ -14,16 +15,25 @@ type ShareQrPanelProps = {
 
 export function ShareQrPanel({
   joinUrl,
+  publicCode,
   activityId,
   participantCount,
   ideaCount,
   isOpen,
 }: ShareQrPanelProps) {
+  const [effectiveUrl, setEffectiveUrl] = useState(joinUrl);
   const [status, setStatus] = useState("Compartir enlace");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.origin) {
+      const path = publicCode ? `/a/${publicCode}` : new URL(joinUrl).pathname;
+      setEffectiveUrl(`${window.location.origin}${path}`);
+    }
+  }, [joinUrl, publicCode]);
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(joinUrl);
+      await navigator.clipboard.writeText(effectiveUrl);
       setStatus("Enlace copiado");
       window.setTimeout(() => setStatus("Compartir enlace"), 1800);
     } catch {
@@ -38,7 +48,7 @@ export function ShareQrPanel({
         await navigator.share({
           title: "Participá en la actividad",
           text: "Participá en esta actividad y compartí tu idea.",
-          url: joinUrl,
+          url: effectiveUrl,
         });
         setStatus("Compartido");
         window.setTimeout(() => setStatus("Compartir enlace"), 1800);
@@ -86,7 +96,15 @@ export function ShareQrPanel({
         <div className="share-qr-info">
           <div className="share-qr-url">
             <span>ENLACE PARA PARTICIPAR</span>
-            <strong>{new URL(joinUrl).pathname}</strong>
+            <strong title={effectiveUrl}>
+              {(() => {
+                try {
+                  return new URL(effectiveUrl).pathname;
+                } catch {
+                  return publicCode ? `/a/${publicCode}` : effectiveUrl;
+                }
+              })()}
+            </strong>
           </div>
           <p>
             Escaneá el QR o compartí el enlace para abrir el formulario y enviar
@@ -120,7 +138,7 @@ export function ShareQrPanel({
           <QRCodeCanvas
             id="share-participation-qr"
             className="share-qr-code"
-            value={joinUrl}
+            value={effectiveUrl}
             size={256}
             style={{ width: 138, height: 138 }}
             level="H"

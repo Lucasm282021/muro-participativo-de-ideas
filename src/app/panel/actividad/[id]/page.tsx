@@ -7,6 +7,7 @@ import {
 } from "@/app/actions";
 import { DeleteActivityButton } from "@/components/delete-activity-button";
 import { ShareQrPanel } from "@/components/share-qr-panel";
+import { getBaseUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { Activity, Idea } from "@/lib/types";
 
@@ -49,10 +50,8 @@ export default async function ActivityDetailPage({
   ]);
   const ideas = (rawIdeas ?? []) as Idea[];
   const pendingCount = ideas.filter((idea) => idea.status === "pending").length;
-  const joinUrl = new URL(
-    `/a/${activity.public_code}`,
-    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
-  ).toString();
+  const baseUrl = await getBaseUrl();
+  const joinUrl = new URL(`/a/${activity.public_code}`, baseUrl).toString();
 
   return (
     <main className="dashboard-page">
@@ -118,6 +117,7 @@ export default async function ActivityDetailPage({
         <div className="detail-workspace">
           <ShareQrPanel
             joinUrl={joinUrl}
+            publicCode={activity.public_code}
             activityId={id}
             participantCount={participantCount ?? 0}
             ideaCount={ideas.length}
