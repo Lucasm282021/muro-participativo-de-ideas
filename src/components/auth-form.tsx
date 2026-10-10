@@ -87,4 +87,3 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     </main>
   );
 }
-// Cambio de prueba para Vercel
