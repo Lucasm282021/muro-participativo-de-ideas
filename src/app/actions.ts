@@ -50,6 +50,17 @@ export async function signUpAction(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp(parsed.data);
   if (error) {
+    if (error.code === "over_email_send_rate_limit" || error.status === 429) {
+      return {
+        error:
+          "Se superó el límite temporal de envío de correos de confirmación. Aguardá unos minutos o contactá a administración.",
+      };
+    }
+    if (error.code === "user_already_exists") {
+      return {
+        error: "Ya existe una cuenta con ese email. Probá iniciar sesión.",
+      };
+    }
     if (process.env.NODE_ENV === "development") {
       console.error("Supabase signup failed:", {
         code: error.code,

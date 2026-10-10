@@ -754,6 +754,7 @@ export function LiveWall({
                     {new Intl.DateTimeFormat("es-AR", {
                       hour: "2-digit",
                       minute: "2-digit",
+                      timeZone: "America/Argentina/Buenos_Aires",
                     }).format(new Date(featured.idea.created_at))}
                   </span>
                 </div>
@@ -800,6 +801,7 @@ export function LiveWall({
                       {new Intl.DateTimeFormat("es-AR", {
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "America/Argentina/Buenos_Aires",
                       }).format(new Date(idea.created_at))}
                     </span>
                     <p>{idea.content}</p>
