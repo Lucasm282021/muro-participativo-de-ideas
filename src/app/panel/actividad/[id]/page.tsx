@@ -151,9 +151,9 @@ export default async function ActivityDetailPage({
                         }).format(new Date(idea.created_at))}
                       </time>
                     </div>
-                    {activity.moderation_mode === "approval" && (
-                      <div className="moderation-actions">
-                        {idea.status !== "published" && (
+                    <div className="moderation-actions">
+                      {idea.status === "pending" && (
+                        <>
                           <form action={moderateIdeaAction}>
                             <input
                               type="hidden"
@@ -174,11 +174,11 @@ export default async function ActivityDetailPage({
                               type="submit"
                               className="button button-approve"
                             >
-                              Mostrar en el muro
+                              {activity.moderation_mode === "approval"
+                                ? "Aprobar idea"
+                                : "Publicar idea"}
                             </button>
                           </form>
-                        )}
-                        {idea.status !== "hidden" && (
                           <form action={moderateIdeaAction}>
                             <input
                               type="hidden"
@@ -195,12 +195,39 @@ export default async function ActivityDetailPage({
                               type="submit"
                               className="button button-quiet"
                             >
-                              Ocultar del muro
+                              Rechazar idea
                             </button>
                           </form>
-                        )}
-                      </div>
-                    )}
+                        </>
+                      )}
+                      {idea.status === "hidden" && (
+                        <form action={moderateIdeaAction}>
+                          <input type="hidden" name="activity_id" value={id} />
+                          <input type="hidden" name="idea_id" value={idea.id} />
+                          <input
+                            type="hidden"
+                            name="status"
+                            value="published"
+                          />
+                          <button
+                            type="submit"
+                            className="button button-approve"
+                          >
+                            Volver a mostrar en el muro
+                          </button>
+                        </form>
+                      )}
+                      {idea.status === "published" && (
+                        <form action={moderateIdeaAction}>
+                          <input type="hidden" name="activity_id" value={id} />
+                          <input type="hidden" name="idea_id" value={idea.id} />
+                          <input type="hidden" name="status" value="hidden" />
+                          <button type="submit" className="button button-quiet">
+                            Ocultar del muro
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </article>
                 ))}
               </div>
