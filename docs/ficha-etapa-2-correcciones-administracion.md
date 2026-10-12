@@ -4,7 +4,9 @@
 **Rama de trabajo activa:** `feat/pagina-administracion`  
 **Rama base:** `develop` (originada en `main`, commit `4278c11`)  
 **Commit base común:** `4278c11bcef3fc00a528cca424df21bad6e28e10`  
-**Estado actual de la etapa:** En curso / Dictamen: CON OBSERVACIONES (Reauditoría OpenCode) / Etapa abierta (no cerrada)  
+**Commit de cierre de versionado:** `b77068a0fbb82e9311c8a4886cd676f9c62f2f0a`
+**Mensaje de commit:** `fix: corregir moderación y seguridad de administración`
+**Estado actual de la etapa:** Versionada en rama de trabajo / Cierre documental / Dictamen histórico: CON OBSERVACIONES (Reauditoría OpenCode) / Integración y validación en entorno real pendientes
 **Responsable:** Antigravity  
 
 ---
@@ -40,17 +42,18 @@ Corregir los defectos funcionales y de consistencia confirmados en la administra
 
 ---
 
-## 3. Estado de Git y clasificación de archivos
+## 3. Estado de Git y registro de versionado
 
 - **Rama activa:** `feat/pagina-administracion`
 - **Ramas base:** `main` y `develop` (ambas convergen intactas en commit `4278c11bcef3fc00a528cca424df21bad6e28e10`).
-- **Archivos modificados en el directorio de trabajo (*tracked changes*):**
+- **Commit de la Etapa 2:** `b77068a0fbb82e9311c8a4886cd676f9c62f2f0a`
+- **Mensaje de commit:** `fix: corregir moderación y seguridad de administración`
+- **Archivos versionados en el commit de la etapa:**
   1. `src/app/actions.ts`: Validación de esquemas Zod, verificación explícita de `owner_id = user.id`, transiciones de estado permitidas, eliminación de asignación redundante de `published_at` y corrección terminológica de «charla» a «actividad».
   2. `src/app/panel/actividad/[id]/page.tsx`: Diferenciación estricta de acciones para ideas `pending` («Aprobar idea» / «Publicar idea» y «Rechazar idea»), `hidden` («Volver a mostrar en el muro») y `published` («Ocultar del muro»).
   3. `src/components/delete-activity-button.tsx`: Corrección terminológica de «charla» a «actividad» en la confirmación y en la etiqueta del botón.
-- **Archivos nuevos sin seguimiento (*untracked files*):**
-  1. `docs/ficha-etapa-1-preparacion-y-documentacion.md` (Ficha de la Etapa 1, preservada intacta).
-  2. `docs/ficha-etapa-2-correcciones-administracion.md` (Ficha actual de la Etapa 2).
+  4. `docs/ficha-etapa-1-preparacion-y-documentacion.md`: Ficha de seguimiento de la Etapa 1.
+  5. `docs/ficha-etapa-2-correcciones-administracion.md`: Ficha de seguimiento de la Etapa 2.
 
 ---
 
@@ -63,31 +66,35 @@ La primera revisión independiente realizada con OpenCode identificó:
 - **F3 (Etapa sin versionar):** Cambios pendientes en working tree sin commit de cierre de etapa.
 - **F4 (Precisión en la ficha de seguimiento):** Distinción entre pruebas del agente y de OpenCode, exactitud de ramas y clasificación de archivos.
 
-### 4.2 Dictamen de la reauditoría de OpenCode: CON OBSERVACIONES
+### 4.2 Dictamen de la reauditoría de OpenCode: CON OBSERVACIONES (Registro histórico)
 Tras la implementación de las correcciones, la reauditoría independiente de OpenCode ratificó el estado:
 - **Hallazgo F1:** ✅ **RESUELTO.** Confirmada la resolución explícita en UI («Publicar idea» / «Rechazar idea») y la admisión en el servidor de transiciones válidas para ideas `pending` en modo automático y de aprobación.
 - **Hallazgo F2:** ✅ **RESUELTO.** Confirmada la eliminación de la asignación redundante en TypeScript, quedando el trigger de PostgreSQL como única fuente de verdad.
-- **Hallazgo F3 (Etapa sin versionar):** ⏳ **PENDIENTE.** Los cambios funcionales y documentales permanecen en el árbol de trabajo de `feat/pagina-administracion` sin versionar en un commit. No se declara resuelto dado que la creación de commits requiere autorización expresa e independiente del responsable.
-- **Hallazgo F4 / N2 (Registro documental de F3):** ✅ **RESUELTO.** Se incorpora explícitamente el estado de F3 tanto en el registro de hallazgos como en la lista de asuntos pendientes de esta ficha.
+- **Hallazgo F3 (Etapa sin versionar):** ✅ **RESUELTO RESPECTO DEL VERSIONADO.** Al momento de la reauditoría figuraba como pendiente en el árbol de trabajo. Tras autorización expresa del responsable, los cambios quedaron formalmente versionados en `feat/pagina-administracion` mediante el commit `b77068a0fbb82e9311c8a4886cd676f9c62f2f0a` (`fix: corregir moderación y seguridad de administración`). Se deja constancia de que esta resolución atañe estrictamente al versionado local en la rama de funcionalidad y no se confunde con la integración en `develop` o `main` ni con el despliegue.
+- **Hallazgo F4 / N2 (Registro documental de F3):** ✅ **RESUELTO.** Se incorporó explícitamente el estado de F3 en el registro de hallazgos y en el cierre documental.
 - **Observación N1 (Cosmética / Opcional):** Registrada como observación estilística menor no bloqueante en `src/app/actions.ts`. Por indicación expresa, no se modificó código funcional.
 
 ---
 
-## 5. Pruebas técnicas ejecutadas exclusivamente por el agente
+## 5. Pruebas técnicas y estado de validaciones
 
-*(Nota: Estas pruebas fueron ejecutadas localmente en la terminal por el agente Antigravity, no por OpenCode. OpenCode realizó una auditoría lógica y estática independiente del diff y de los archivos)*
+Se establece una distinción explícita sobre el alcance de las validaciones ejecutadas y las pendientes:
 
-| Comprobación | Comando | Resultado real verificado por el agente |
-| :--- | :--- | :--- |
-| Verificación estática de tipos | `npx tsc --noEmit` | ✅ Exit code 0 (0 errores en todo el proyecto) |
-| Análisis de calidad y formato Biome | `npx biome check src/app/panel/actividad/[id]/page.tsx src/components/delete-activity-button.tsx src/app/actions.ts` | ✅ Exit code 0 (0 errores, 0 advertencias) |
-| Compilación de producción Next.js | `npm run build` | ✅ Exit code 0 (compilación Turbopack exitosa, 11 rutas generadas en 3.8 s) |
-| Verificación de consistencia git | `git diff` | ✅ Validado: solo cambios delimitados en los 3 archivos funcionales |
+| Validación | Ejecutor / Fuente | Estado / Resultado | Detalle |
+| :--- | :--- | :--- | :--- |
+| **TypeScript (`npx tsc --noEmit`)** | Agente Antigravity | ✅ Exitoso informado | Exit code 0 (0 errores en todo el proyecto). |
+| **Biome (`npx biome check`)** | Agente Antigravity | ✅ Exitoso informado | Exit code 0 (0 errores, 0 advertencias en archivos funcionales). |
+| **Build Next.js (`npm run build`)** | Agente Antigravity | ✅ Exitoso según informe del agente | Exit code 0 (compilación Turbopack exitosa, 11 rutas generadas en 3.8 s). **No reproducido por OpenCode**. |
+| **Pruebas en entorno real (Supabase / RLS)** | Pendiente | ⏳ No realizadas | Pendientes pruebas funcionales e2e contra base de datos activa de Supabase y verificación dinámica de RLS. |
+| **Integración en `develop` o `main`** | Pendiente | ⏳ No realizada | No se han ejecutado fusiones ni sincronizaciones con `develop` o `main`. |
+| **Despliegue / Publicación** | Pendiente | ⏳ No realizado | La Etapa 2 no se ha integrado en `develop` ni en `main`, y sus cambios no se han desplegado. La preparación para producción queda pendiente de las validaciones funcionales y de la autorización correspondiente. |
 
 ---
 
-## 6. Asuntos pendientes y condiciones para el cierre formal de la Etapa 2
+## 6. Cierre documental y estado del proyecto
 
-La Etapa 2 **permanece abierta** y requiere las siguientes acciones previas a su cierre definitivo:
-1. **Resolución de F3:** Autorización expresa del responsable para versionar los cambios mediante commit en la rama `feat/pagina-administracion`.
-2. **Aprobación final del responsable:** Validación de la documentación y del estado general del repositorio para autorizar el paso a la siguiente etapa.
+1. **Trabajo versionado en rama de trabajo:** La totalidad del alcance funcional autorizado y la documentación base de la Etapa 2 quedaron resguardados en el commit `b77068a0fbb82e9311c8a4886cd676f9c62f2f0a` en la rama `feat/pagina-administracion`.
+2. **Dictamen histórico preservado:** Se conserva de forma fidedigna el dictamen de reauditoría independiente de OpenCode (`CON OBSERVACIONES`), reflejando el estado de la revisión técnica externa.
+3. **Validación funcional y técnica en entorno real pendiente:** Quedan pendientes las pruebas sobre una instancia real de Supabase con sesión autenticada y políticas RLS activas.
+4. **Integración pendiente:** La integración hacia la rama base `develop` y su eventual consolidación en `main` quedan sujetas a revisión y autorización explícita del responsable.
+5. **Estado de despliegue y producción:** La Etapa 2 no se ha integrado en `develop` ni en `main`, y sus cambios no se han desplegado. La preparación para producción queda pendiente de las validaciones funcionales y de la autorización correspondiente.
