@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { IdeaForm } from "@/components/idea-form";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 
 export default async function JoinActivityPage({
   params,
 }: PageProps<"/a/[code]">) {
   const { code } = await params;
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const { data: activity } = await supabase
     .from("activities")
     .select("id, public_code, title, question, status")
