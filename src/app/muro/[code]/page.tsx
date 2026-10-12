@@ -2,14 +2,14 @@ import { notFound } from "next/navigation";
 import { LiveWall } from "@/components/live-wall";
 import { MAX_WALL_CARDS } from "@/lib/presentation";
 import { getBaseUrl } from "@/lib/site-url";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { Idea } from "@/lib/types";
 
 export default async function PublicWallPage({
   params,
 }: PageProps<"/muro/[code]">) {
   const { code } = await params;
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const { data: activity } = await supabase
     .from("activities")
     .select("id, public_code, title, question, status")
