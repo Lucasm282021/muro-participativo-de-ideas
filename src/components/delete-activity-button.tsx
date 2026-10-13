@@ -17,14 +17,14 @@ export function DeleteActivityButton({
       action={formAction}
       onSubmit={(event) => {
         const confirmed = window.confirm(
-          `¿Eliminar la charla “${activityTitle}”? Se borrarán también sus ideas y participantes. Esta acción no se puede deshacer.`,
+          `¿Eliminar la actividad “${activityTitle}”? Se borrarán también sus ideas y participantes. Esta acción no se puede deshacer.`,
         );
         if (!confirmed) event.preventDefault();
       }}
     >
       <input type="hidden" name="activity_id" value={activityId} />
       <button type="submit" className="button button-danger" disabled={pending}>
-        {pending ? "Eliminando…" : "Eliminar charla"}
+        {pending ? "Eliminando…" : "Eliminar actividad"}
       </button>
       {state.error && (
         <p className="form-message error-message" role="alert">

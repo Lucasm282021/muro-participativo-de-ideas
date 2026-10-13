@@ -250,69 +250,219 @@ export async function submitIdeaAction(
   };
 }
 
+const moderateIdeaSchema = z.object({
+  ideaId: z.uuid("Identificador de idea inválido."),
+  activityId: z.uuid("Identificador de actividad inválido."),
+  status: z.enum(["published", "hidden"], {
+    message: "Estado de moderación inválido.",
+  }),
+});
+
 export async function moderateIdeaAction(formData: FormData) {
-  const ideaId = z.uuid().safeParse(formData.get("idea_id"));
-  const activityId = z.uuid().safeParse(formData.get("activity_id"));
-  const status = z
-    .enum(["published", "hidden"])
-    .safeParse(formData.get("status"));
-  if (!ideaId.success || !activityId.success || !status.success) return;
+  const parsed = moderateIdeaSchema.safeParse({
+    ideaId: formData.get("idea_id"),
+    activityId: formData.get("activity_id"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success) {
+    console.error(
+      "Error de validación en moderateIdeaAction:",
+      parsed.error.issues,
+    );
+    return;
+  }
 
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) redirect("/ingresar");
+  if (authError || !user) redirect("/ingresar");
 
-  await supabase
+  // 1. Validar existencia y propiedad de la actividad (owner_id = user.id)
+  const { data: activity, error: activityError } = await supabase
+    .from("activities")
+    .select("id, owner_id, moderation_mode")
+    .eq("id", parsed.data.activityId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (activityError || !activity) {
+    console.error("Actividad no encontrada o el usuario no es el propietario.");
+    return;
+  }
+
+  // 2. Validar existencia de la idea dentro de la actividad y su estado actual
+  const { data: idea, error: ideaError } = await supabase
     .from("ideas")
-    .update({ status: status.data })
-    .eq("id", ideaId.data)
-    .eq("activity_id", activityId.data);
-  revalidatePath(`/panel/actividad/${activityId.data}`);
+    .select("id, status, activity_id, published_at")
+    .eq("id", parsed.data.ideaId)
+    .eq("activity_id", parsed.data.activityId)
+    .maybeSingle();
+
+  if (ideaError || !idea) {
+    console.error("Idea no encontrada para la actividad especificada.");
+    return;
+  }
+
+  // 3. Validar transiciones de estado permitidas:
+  // - Si el estado ya es el solicitado, no realizar operación redundante.
+  // - Una idea 'pending' puede resolverse publicándola ('published') o rechazándola/ocultándola ('hidden').
+  // - Una idea 'hidden' puede republicarse a 'published'.
+  // - Una idea 'published' puede ocultarse a 'hidden'.
+  const currentStatus = idea.status;
+  const targetStatus = parsed.data.status;
+
+  if (currentStatus === targetStatus) {
+    return;
+  }
+
+  // La actualización de `published_at` es gestionada de forma atómica por el trigger
+  // de PostgreSQL `ideas_update_published_at` (asigna now() al pasar a published y null al salir).
+  const { error: updateError } = await supabase
+    .from("ideas")
+    .update({ status: targetStatus })
+    .eq("id", parsed.data.ideaId)
+    .eq("activity_id", parsed.data.activityId);
+
+  if (updateError) {
+    console.error(
+      "Error al actualizar estado de la idea:",
+      updateError.message,
+    );
+    throw new Error("No pudimos actualizar el estado de la idea.");
+  }
+
+  revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
 }
+
+const setModerationModeSchema = z.object({
+  activityId: z.uuid("Identificador de actividad inválido."),
+  moderationMode: z.enum(["automatic", "approval"], {
+    message: "Modo de moderación inválido.",
+  }),
+});
 
 export async function setModerationModeAction(formData: FormData) {
-  const activityId = z.uuid().safeParse(formData.get("activity_id"));
-  const mode = z
-    .enum(["automatic", "approval"])
-    .safeParse(formData.get("moderation_mode"));
-  if (!activityId.success || !mode.success) return;
+  const parsed = setModerationModeSchema.safeParse({
+    activityId: formData.get("activity_id"),
+    moderationMode: formData.get("moderation_mode"),
+  });
+  if (!parsed.success) {
+    console.error(
+      "Error de validación en setModerationModeAction:",
+      parsed.error.issues,
+    );
+    return;
+  }
 
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) redirect("/ingresar");
+  if (authError || !user) redirect("/ingresar");
 
-  await supabase
+  // Validar existencia y propiedad de la actividad
+  const { data: activity, error: activityError } = await supabase
     .from("activities")
-    .update({ moderation_mode: mode.data })
-    .eq("id", activityId.data);
-  revalidatePath(`/panel/actividad/${activityId.data}`);
+    .select("id, moderation_mode")
+    .eq("id", parsed.data.activityId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (activityError || !activity) {
+    console.error("Actividad no encontrada o el usuario no es el propietario.");
+    return;
+  }
+
+  if (activity.moderation_mode === parsed.data.moderationMode) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("activities")
+    .update({ moderation_mode: parsed.data.moderationMode })
+    .eq("id", parsed.data.activityId)
+    .eq("owner_id", user.id);
+
+  if (updateError) {
+    console.error(
+      "Error al actualizar modo de moderación:",
+      updateError.message,
+    );
+    throw new Error("No pudimos actualizar el modo de publicación.");
+  }
+
+  revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
 }
 
+const toggleActivitySchema = z.object({
+  activityId: z.uuid("Identificador de actividad inválido."),
+  status: z.enum(["open", "closed"], {
+    message: "Estado de actividad inválido.",
+  }),
+});
+
 export async function toggleActivityAction(formData: FormData) {
-  const activityId = z.uuid().safeParse(formData.get("activity_id"));
-  const status = z.enum(["open", "closed"]).safeParse(formData.get("status"));
-  if (!activityId.success || !status.success) return;
+  const parsed = toggleActivitySchema.safeParse({
+    activityId: formData.get("activity_id"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success) {
+    console.error(
+      "Error de validación en toggleActivityAction:",
+      parsed.error.issues,
+    );
+    return;
+  }
 
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) redirect("/ingresar");
+  if (authError || !user) redirect("/ingresar");
 
-  await supabase
+  // Validar existencia y propiedad de la actividad
+  const { data: activity, error: activityError } = await supabase
+    .from("activities")
+    .select("id, status")
+    .eq("id", parsed.data.activityId)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (activityError || !activity) {
+    console.error("Actividad no encontrada o el usuario no es el propietario.");
+    return;
+  }
+
+  if (activity.status === parsed.data.status) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
     .from("activities")
     .update({
-      status: status.data,
-      closed_at: status.data === "closed" ? new Date().toISOString() : null,
-      opened_at: status.data === "open" ? new Date().toISOString() : undefined,
+      status: parsed.data.status,
+      closed_at:
+        parsed.data.status === "closed" ? new Date().toISOString() : null,
+      opened_at:
+        parsed.data.status === "open" ? new Date().toISOString() : undefined,
     })
-    .eq("id", activityId.data);
+    .eq("id", parsed.data.activityId)
+    .eq("owner_id", user.id);
+
+  if (updateError) {
+    console.error(
+      "Error al actualizar estado de la actividad:",
+      updateError.message,
+    );
+    throw new Error("No pudimos cambiar el estado de la actividad.");
+  }
+
   revalidatePath("/panel");
-  revalidatePath(`/panel/actividad/${activityId.data}`);
+  revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
 }
 
 export async function deleteActivityAction(
@@ -326,8 +476,23 @@ export async function deleteActivityAction(
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) redirect("/ingresar");
+  if (authError || !user) redirect("/ingresar");
+
+  // Validar existencia y propiedad explícita de la actividad
+  const { data: activity, error: activityError } = await supabase
+    .from("activities")
+    .select("id")
+    .eq("id", activityId.data)
+    .eq("owner_id", user.id)
+    .maybeSingle();
+
+  if (activityError || !activity) {
+    return {
+      error: "No tenés permisos para eliminar esta actividad o no existe.",
+    };
+  }
 
   const { data, error } = await supabase
     .from("activities")
@@ -340,7 +505,7 @@ export async function deleteActivityAction(
   if (error || !data)
     return {
       error:
-        "No pudimos eliminar la charla. Actualizá la página e intentá de nuevo.",
+        "No pudimos eliminar la actividad. Actualizá la página e intentá de nuevo.",
     };
 
   revalidatePath("/panel");
