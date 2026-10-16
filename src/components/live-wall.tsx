@@ -1034,7 +1034,7 @@ export function LiveWall({
     promoteNext,
   ]);
 
-  // Suscripción Realtime, resync al SUBSCRIBED y resync periódico (60s)
+  // Suscripción Realtime, resync al SUBSCRIBED y resync periódico (10s)
   useEffect(() => {
     const supabase = createClient();
     const currentActivityId = activityId;

@@ -7,7 +7,7 @@
 - **Commit documental de cierre de la Etapa 2:** `c7cd05d4c01fa0a922d8ab0c4e2f017dcba0511a`
 - **Último estado conocido de ramas base:** `main` y `develop` en `4278c11bcef3fc00a528cca424df21bad6e28e10`
 - **Entorno local informado:** Next.js en `http://localhost:3000` y Supabase local en `127.0.0.1:25435` (contenedores Docker)
-- **Estado documental de la Etapa 3:** Plan documentado; ejecución pendiente
+- **Estado documental de la Etapa 3:** Ejecución parcial local (2026-10-16); ver resultados registrados
 - **Responsable:** Antigravity
 
 ---
@@ -121,9 +121,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   3. Enviar el formulario de autenticación.
 - **Resultado esperado y criterio de aceptación:** Redirección exitosa a `http://localhost:3000/panel`, persistencia observable de la sesión autenticada en el navegador y visualización de la interfaz del panel con el email del organizador.
 - **Evidencia requerida:** URL final de aterrizaje, captura visual de `/panel` con sesión iniciada y comprobación de acceso autorizado sin depender de nombres de cookies asumidos.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Validado manualmente en Supabase local
+- **Resultado real:** Cuenta ficticia creada e inicio de sesión exitoso; `/panel` mostró la sesión autenticada.
+- **Observaciones / Defectos:** Cuenta temporal eliminada al finalizar.
 
 ---
 
@@ -136,9 +136,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   2. Intentar acceder directamente a una ruta de detalle `http://localhost:3000/panel/actividad/[id-ficticio]`.
 - **Resultado esperado y criterio de aceptación:** Redirección automática inmediata hacia `http://localhost:3000/ingresar`, sin renderizar vistas privadas ni exponer datos de actividades.
 - **Evidencia requerida:** Redirección observada hacia `/ingresar` y ausencia de contenido privado en el cliente.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Validado manualmente en local
+- **Resultado real:** Acceso anónimo a `/panel` redirigió a `/ingresar`.
+- **Observaciones / Defectos:** No se invocó Server Action anónima.
 
 ---
 
@@ -153,9 +153,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   4. Intentar ejecutar una Server Action (`moderateIdeaAction`, `setModerationModeAction`, `toggleActivityAction` o `deleteActivityAction`) sobre la Actividad 1 con la sesión de B.
 - **Resultado esperado y criterio de aceptación:** La vista devuelve página `404` (no encontrada). Las Server Actions devuelven error de autorización o abortan la mutación por no coincidir `owner_id = user.id`. La base de datos no sufre modificación alguna.
 - **Evidencia requerida:** Captura de la respuesta 404 en interfaz, respuesta de error devuelta por la Server Action y confirmación de integridad en base de datos.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Parcialmente validado manualmente en local
+- **Resultado real:** La cuenta B no mostró actividades en `/panel`; el acceso directo al detalle de la actividad de A respondió 404.
+- **Observaciones / Defectos:** No se intentó una Server Action mutante como B; TC-10 de RLS sigue pendiente.
 
 ---
 
@@ -169,9 +169,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   3. Hacer clic en el botón de acción explícita **«Aprobar idea»**.
 - **Resultado esperado y criterio de aceptación:** La idea desaparece de la sección de pendientes y pasa a la lista de ideas publicadas. La base de datos actualiza `status = 'published'` y el trigger asigna `published_at = now()`.
 - **Evidencia requerida:** Captura del panel tras la aprobación y comprobación del registro en base de datos (`status = 'published'`, `published_at IS NOT NULL`).
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Parcialmente validado manualmente en local
+- **Resultado real:** Una idea `pending` en modo `approval` apareció en el panel; al aprobarla pasó a la lista publicada y se presentó en el muro.
+- **Observaciones / Defectos:** No se consultó `published_at` directamente; queda pendiente TC-09.
 
 ---
 
@@ -215,9 +215,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   2. Hacer clic en **«Ocultar del muro»**.
 - **Resultado esperado y criterio de aceptación:** La idea cambia su estado a `hidden`, desaparece de la vista pública del muro y pasa a la sección de ideas ocultas del panel.
 - **Evidencia requerida:** Captura del panel tras la acción y consulta del estado en la tabla `ideas` (`status = 'hidden'`, `published_at IS NULL`).
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Parcialmente validado manualmente en local
+- **Resultado real:** La idea publicada pasó a “Oculta del muro” y dejó de mostrarse en el muro dentro de un ciclo de resync (10 s).
+- **Observaciones / Defectos:** No se inspeccionó el estado SQL ni `published_at`.
 
 ---
 
@@ -230,9 +230,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   2. Hacer clic en **«Volver a mostrar en el muro»**.
 - **Resultado esperado y criterio de aceptación:** La idea pasa a estado `published`, reaparece en la lista de publicadas del panel y vuelve a ser legible en el muro público con una nueva marca temporal de publicación.
 - **Evidencia requerida:** Captura del panel y comprobación de visibilidad en el muro y en base de datos.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Parcialmente validado manualmente en local
+- **Resultado real:** Al volver a mostrar la idea oculta, apareció como destacada en el muro en menos de 2 s.
+- **Observaciones / Defectos:** No se inspeccionó la nueva marca `published_at`.
 
 ---
 
@@ -276,7 +276,7 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   - Éxito aparente (código de respuesta exitoso que no produjo mutación real).
   Ninguno de esos resultados debe interpretarse aisladamente como prueba concluyente de seguridad sin contrastar con la verificación independiente de que el recurso de A no cambió.
 - **Evidencia requerida:** Respuestas de consultas de red con tokens JWT de prueba normales de B, respuestas de PostgREST y verificación independiente del estado inalterado del recurso de A.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional (la ejecución de estos pasos sigue pendiente de autorización expresa).
+- **Estado de inspección:** Pendiente de validación funcional completa. La ejecución local fue autorizada; estos pasos específicos no se realizaron.
 - **Resultado real:** Sin ejecutar
 - **Observaciones / Defectos:** Por completar durante la ejecución.
 
@@ -292,9 +292,9 @@ Se establece una diferenciación rigurosa entre lo confirmado mediante inspecci�
   3. Inspeccionar el código fuente HTML, los datos serializados del cliente y las respuestas de red.
 - **Resultado esperado y criterio de aceptación:** El muro despliega únicamente las ideas con `status = 'published'`. Ninguna idea `pending` ni `hidden` aparece en pantalla, ni está presente en los payloads serializados del cliente.
 - **Evidencia requerida:** Captura visual del muro público e inspección del payload/DOM del navegador.
-- **Estado de inspección:** Compatible según inspección estática; pendiente de validación funcional
-- **Resultado real:** Sin ejecutar
-- **Observaciones / Defectos:** Por completar durante la ejecución.
+- **Estado de inspección:** Parcialmente validado manualmente en local
+- **Resultado real:** El muro mostró ideas `published`, no mostró inicialmente la idea `pending` y reaccionó a aprobación, ocultamiento y republicación.
+- **Observaciones / Defectos:** No se inspeccionó el HTML/RSC serializado; esa parte de TC-11 sigue pendiente.
 
 ---
 
@@ -374,7 +374,7 @@ Permanecen documentadas como pendientes las siguientes comprobaciones:
 1. **Inexistencia de suite de testing automatizada:** El repositorio no cuenta con dependencias como Vitest, Playwright o Cypress. La ejecución de las pruebas deberá llevarse a cabo mediante inspección interactiva y comprobaciones manuales/asistidas.
 2. **Ausencia de datos semilla (*seed data*):** La base de datos local no cuenta con registros precargados de actividades ni ideas. Se requiere la preparación previa de datos ficticios para poder ejecutar los casos TC-01 a TC-12.
 3. **Requisito de múltiples identidades para pruebas de seguridad:** La comprobación efectiva de TC-03 y TC-10 depende de registrar al menos dos cuentas de organizador distintas en Supabase local.
-4. **Validación de entorno real pendiente:** Tal como se documentó al cierre de la Etapa 2, no se habían ejecutado hasta ahora pruebas de extremo a extremo contra la base de datos local activa.
+4. **Validación de entorno real parcial:** Se ejecutaron pruebas de extremo a extremo parciales contra la base local el 2026-10-16; no cubrieron todos los casos ni los criterios de producción.
 5. **Necesidad de herramientas de captura para pruebas visuales:** TC-12 requerirá capturas de pantalla tanto en resolución amplia como reducida para evidenciar el comportamiento responsivo.
 
 ---
@@ -397,23 +397,23 @@ La ejecución de la matriz se organizará de forma metódica en cuatro bloques c
 
 | Bloque | Caso | Fecha de ejecución | Responsable | Evidencia adjunta | Resultado (Pasa / Falla) | Defectos asociados |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Acceso y Seguridad** | TC-01 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| | TC-02 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| | TC-03 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| **2. Moderación** | TC-04 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
+| **1. Acceso y Seguridad** | TC-01 | 2026-10-16 | Codex | Resultado real TC-01 | Pasa | — |
+| | TC-02 | 2026-10-16 | Codex | Resultado real TC-02 | Pasa | Server Actions anónimas no probadas |
+| | TC-03 | 2026-10-16 | Codex | Resultado real TC-03 | Parcial | Acciones mutantes y RLS pendientes |
+| **2. Moderación** | TC-04 | 2026-10-16 | Codex | Resultado real TC-04 | Parcial | `published_at` pendiente |
 | | TC-05 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
 | | TC-06 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| | TC-07 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| | TC-08 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
+| | TC-07 | 2026-10-16 | Codex | Resultado real TC-07 | Parcial | Verificación SQL pendiente |
+| | TC-08 | 2026-10-16 | Codex | Resultado real TC-08 | Parcial | Verificación SQL pendiente |
 | **3. Persistencia y RLS** | TC-09 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
 | | TC-10 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
-| **4. Muro y Visual** | TC-11 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
+| **4. Muro y Visual** | TC-11 | 2026-10-16 | Codex | Resultado real TC-11 | Parcial | Inspección HTML/RSC pendiente |
 | | TC-12 | *Pendiente* | *Por asignar* | *Pendiente* | *Sin ejecutar* | — |
 
 ---
 
 ## 10. Estado documental
 
-- **Carácter del documento:** Plan de pruebas y matriz de aceptación formal. No constituye un informe de resultados ejecutados.
-- **Estado formal:** `Plan documentado; ejecución pendiente`.
-- **Cierre de fase de preparación:** La ejecución efectiva de los bloques de prueba queda condicionada a la revisión y autorización expresa del responsable del proyecto. No se declara la aplicación lista para producción ni para despliegue.
+- **Carácter del documento:** Plan de pruebas y matriz de aceptación formal con resultados parciales registrados.
+- **Estado formal:** `Ejecución parcial local; TC-01 y TC-02 pasan; TC-03, TC-04, TC-07, TC-08 y TC-11 tienen evidencia parcial; el resto sigue pendiente`.
+- **Cierre de fase de preparación:** La ejecución local autorizada cubrió solo los casos indicados. No se declara la aplicación lista para producción ni para despliegue.
