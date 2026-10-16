@@ -25,6 +25,7 @@ export default async function ActivityDetailPage({
     .from("activities")
     .select("*")
     .eq("id", id)
+    .eq("owner_id", user.id)
     .maybeSingle();
   if (!rawActivity) notFound();
   const activity = rawActivity as Activity;

@@ -4,7 +4,7 @@ export const MAX_WALL_CARDS = 48;
 export const HOLD_DURATION_MS = 8000;
 export const TRANSITION_DURATION_MS = 700;
 export const BATCH_CAP = 100;
-export const RESYNC_INTERVAL_MS = 60000;
+export const RESYNC_INTERVAL_MS = 10000;
 export const NULL_MARKER = "__NULL_MARKER__";
 
 export type FeaturedPhase = "holding" | "transitioning";

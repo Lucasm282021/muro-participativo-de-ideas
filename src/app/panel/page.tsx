@@ -15,6 +15,7 @@ export default async function OrganizerPanel() {
   const { data } = await supabase
     .from("activities")
     .select("*")
+    .eq("owner_id", user.id)
     .order("created_at", { ascending: false });
   const activities = (data ?? []) as Activity[];
 

@@ -242,9 +242,21 @@ export async function submitIdeaAction(
       error:
         "La actividad ya no recibe ideas o hubo un problema. Volvé a intentarlo.",
     };
+
+  const result = data[0];
+  if (result.outcome === "duplicate")
+    return {
+      error:
+        "Ya enviaste una idea igual en esta actividad. Probá con una idea distinta.",
+    };
+  if (result.outcome === "rate_limited")
+    return {
+      error:
+        "Enviaste varias ideas seguidas. Esperá un minuto antes de sumar otra.",
+    };
   return {
     success:
-      data[0].idea_status === "published"
+      result.idea_status === "published"
         ? "¡Tu idea ya está en el muro!"
         : "¡Gracias! Tu idea quedó pendiente de aprobación.",
   };
