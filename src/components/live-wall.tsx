@@ -496,7 +496,10 @@ export function LiveWall({
         const attempts =
           (verificationAttemptsRef.current.get(candidateId) ?? 0) + 1;
         verificationAttemptsRef.current.set(candidateId, attempts);
-        const delay = Math.min(2000 * 1.5 ** (attempts - 1), RESYNC_INTERVAL_MS);
+        const delay = Math.min(
+          2000 * 1.5 ** (attempts - 1),
+          RESYNC_INTERVAL_MS,
+        );
         clearRetryTimer();
         const scheduledGen = gen;
         retryTimerRef.current = setTimeout(() => {
@@ -1043,7 +1046,6 @@ export function LiveWall({
           event: "*",
           schema: "public",
           table: "ideas",
-          filter: `activity_id=eq.${activityId}`,
         },
         (payload) => {
           // Filtrar eventos si la actividad activa ya no coincide con el canal
@@ -1052,12 +1054,15 @@ export function LiveWall({
           }
 
           if (payload.eventType === "DELETE") {
+            if (payload.old.activity_id !== currentActivityId) {
+              return;
+            }
             handleRemoveIdea(payload.old.id);
             return;
           }
           const idea = payload.new as Idea;
           // Validar que la idea pertenezca a la actividad activa
-          if (idea.activity_id && idea.activity_id !== currentActivityId) {
+          if (idea.activity_id !== currentActivityId) {
             return;
           }
 
