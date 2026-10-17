@@ -254,6 +254,12 @@ export async function submitIdeaAction(
       error:
         "Enviaste varias ideas seguidas. Esperá un minuto antes de sumar otra.",
     };
+
+  if (result.outcome === "accepted") {
+    revalidatePath("/panel");
+    revalidatePath("/panel/actividad/[id]", "page");
+  }
+
   return {
     success:
       result.idea_status === "published"

@@ -295,7 +295,9 @@ export function LiveWall({
 
           if (currentWm) {
             catchUpQuery = catchUpQuery.or(
-              `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`,
+              currentWm.id
+                ? `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`
+                : `created_at.gt.${currentWm.createdAt}`,
             );
           }
 
@@ -644,7 +646,9 @@ export function LiveWall({
 
       if (currentWm) {
         discoverQuery = discoverQuery.or(
-          `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`,
+          currentWm.id
+            ? `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`
+            : `created_at.gt.${currentWm.createdAt}`,
         );
       }
 

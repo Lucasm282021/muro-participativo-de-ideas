@@ -10,6 +10,7 @@ import { ShareQrPanel } from "@/components/share-qr-panel";
 import { getBaseUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import type { Activity, Idea } from "@/lib/types";
+import { PanelLiveRefresh } from "./panel-live-refresh";
 
 export default async function ActivityDetailPage({
   params,
@@ -56,6 +57,7 @@ export default async function ActivityDetailPage({
 
   return (
     <main className="dashboard-page">
+      <PanelLiveRefresh activityId={id} />
       <header className="dashboard-nav">
         <Link className="brand brand-dark" href="/">
           <span className="brand-mark">
