@@ -73,6 +73,7 @@
 - **Tarea:** disparar `requestReconcile()` en `visibilitychange` (además de SUBSCRIBED + 60 s actuales en `live-wall.tsx:636-682`).
 - **Criterios de aceptación:** tras >60 s fuera de pestaña, al volver el muro incorpora ideas nuevas y oculta moderadas en ≤1 pasada.
 - **Verificación:** `PRUEBA` pestaña en segundo plano con envíos/ocultación, luego foco; observar actualización.
+- **Resultado (validación dinámica 2026-10-16; dictamen documental 2026-10-17): ACEPTADO CON LIMITACIÓN DOCUMENTADA.** Resultado funcional favorable: la idea sintética creada mientras la pestaña estaba oculta (`Idea Sintetica T8 Causalidad Visibilidad Foco`) apareció en el muro al recuperar la visibilidad, sin recarga manual, en ≤1 pasada y sin duplicados. Causalidad de `visibilitychange` razonablemente respaldada (handler presente en `live-wall.tsx:1100-1111`; secuencia ocultar → espera 12 s → crear idea → volver a visible registrada en scratchpads), no demostrada con logs independientes. Limitaciones: evidencias conservadas con nombres distintos a los originalmente referenciados; sin trazabilidad ms absoluta del evento; «0 errores de consola» sin log exportado. Cierre formal pendiente de aprobación.
 
 ### T9 Error visible para el organizador + estados de carga/error globales (M5)
 - **Operación:** CODIGO.

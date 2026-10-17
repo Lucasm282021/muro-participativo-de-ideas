@@ -415,5 +415,6 @@ La ejecución de la matriz se organizará de forma metódica en cuatro bloques c
 ## 10. Estado documental
 
 - **Carácter del documento:** Plan de pruebas y matriz de aceptación formal con resultados parciales registrados.
-- **Estado formal:** `Ejecución parcial local; TC-01 y TC-02 pasan; TC-03, TC-04, TC-07, TC-08 y TC-11 tienen evidencia parcial; el resto sigue pendiente`.
+- **Estado formal:** `Ejecución parcial local; TC-01 y TC-02 pasan; TC-03, TC-04, TC-07, TC-08 y TC-11 tienen evidencia parcial; el resto sigue pendiente`. 
+- **T8/D2 (resync al recuperar foco):** aceptado con limitación documentada el 2026-10-17; ver `docs/auditorias/2026-10-12-plan-de-accion.md` (T8). Cierre formal pendiente.
 - **Cierre de fase de preparación:** La ejecución local autorizada cubrió solo los casos indicados. No se declara la aplicación lista para producción ni para despliegue.

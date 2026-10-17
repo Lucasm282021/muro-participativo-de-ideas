@@ -1097,6 +1097,19 @@ export function LiveWall({
     };
   }, [activityId, handleNewIdea, handleRemoveIdea, requestReconcile]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestReconcileRef.current();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
   const gridGeometry = getGridConfig(
     wall.length,
     containerSize.width,
