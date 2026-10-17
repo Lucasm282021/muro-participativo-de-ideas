@@ -238,11 +238,7 @@ export function IdeaForm({ code }: { code: string }) {
           </div>
           <div className="status-message-content">
             <strong className="status-title">¡Idea enviada!</strong>
-            <p className="status-explanation">
-              {state.success?.toLowerCase().includes("aprobaci")
-                ? "Tu idea quedó pendiente de aprobación."
-                : "Está esperando su turno para aparecer en el muro."}
-            </p>
+            <p className="status-explanation">{state.success}</p>
           </div>
         </div>
       )}

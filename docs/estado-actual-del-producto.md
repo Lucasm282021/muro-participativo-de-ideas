@@ -1,6 +1,6 @@
 # Estado actual del producto — Muro Participativo de Ideas ("muro común")
 
-**Fecha:** 08/10/2026
+**Fecha:** 08/10/2026 · **Última actualización:** 16/10/2026 (cierre de D4/T7 — mensaje de éxito según estado real)
 **Propósito:** fuente de verdad única sobre qué producto estamos construyendo, qué decisiones están aprobadas, qué está implementado, qué está validado y qué falta.
 **Alcance de este documento:** producto + arquitectura. No es un inventario de archivos ni un plan de refactor.
 **Fuentes:** implementación actual del repositorio (incluidos los commits de `feat/pagina-administracion`), `docs/evaluacion-cola-de-presentacion.md`, `docs/arquitectura.md`, `docs/modelo-de-datos.md`, `docs/despliegue.md`, README, migraciones de Supabase, y la evidencia de validación disponible.
@@ -148,7 +148,6 @@ Categorías usadas (definiciones estrictas):
 | Aspecto | Qué falta | Referencia |
 | --- | --- | --- |
 | Resync (decisión 9) | Falta refetch **al recuperar la visibilidad de la pestaña** (foco), previsto en la evaluación §3.4/A5. Hoy: sólo `SUBSCRIBED` + cada 10 s. | Discrepancia D2 |
-| Mensaje de éxito de envío | La UI ignora el texto diferenciado del servidor (publicada vs pendiente de aprobación) y muestra siempre "Está esperando su turno". | **Problema funcional pendiente** — Discrepancia D4 |
 | Modelado del QR/LAN | La corrección aprobada (abrir panel vía `http://192.168.1.12:3000`) depende de que el organizador acceda desde esa URL; no hay una validación en dispositivo. | Discrepancia D8 |
 
 ### 5.3 Pendiente de validación (implementado, sin evidencia manual)
@@ -188,18 +187,17 @@ Comportamiento aprobado y su estado actual en `src/components/idea-form.tsx`:
 | **Enviando + spinner** | ✅ implementado | Botón muestra `<span class="button-spinner"/> Enviando…` durante `pending` |
 | **Botón bloqueado** | ✅ implementado | `disabled={pending}` + `aria-busy` + prevención de reenvío en `onSubmit` + anuncio `aria-live` "Enviando tu idea…" |
 | **Confirmación real del servidor** | ✅ implementado | El mensaje de éxito sólo se muestra si la Server Action devolvió `success` (no hay confirmación optimista) |
-| **Mensaje de espera en cola** | ⚠️ implementado con problema | Se muestra "¡Idea enviada! Está esperando su turno para aparecer en el muro." — **pero siempre**, ver D4 |
+| **Mensaje de éxito según estado real** | ✅ implementado (2026-10-16) | El bloque de éxito muestra textualmente el `state.success` devuelto por el servidor: "¡Tu idea ya está en el muro!" (publicada) o "¡Gracias! Tu idea quedó pendiente de aprobación." (pendiente); se eliminó la inferencia por subcadena (D4/T7) |
 | **Limpieza del textarea** | ✅ implementado | Al pasar de `pending` a terminado **con** `success`: `setContent("")` |
 | **Preservación de identidad** | ✅ implementado | Nombre/apellido/email viven en estado controlado que no se resetea; además se persisten en `localStorage` por actividad para no volver a completarlos |
 | **Conservación del contenido ante error** | ✅ implementado | El textarea es controlado: el contenido **no** se borra si el servidor devuelve `error`; además se hace focus y scroll al mensaje de error |
 
-Mensajería actual:
+Mensajería actual (tras cierre de D4, 2026-10-16):
 
-- **Éxito (mostrado):** "¡Idea enviada! Está esperando su turno para aparecer en el muro."
+- **Éxito (mostrado):** título "¡Idea enviada!" + el texto literal devuelto por el servidor: "¡Tu idea ya está en el muro!" (idea publicada, modo `automatic`) o "¡Gracias! Tu idea quedó pendiente de aprobación." (modo `approval`).
 - **Error (mostrado):** título "No pudimos enviar tu idea" + el texto devuelto por el servidor.
-- **Éxito (devuelto por el servidor, NO mostrado):** "¡Tu idea ya está en el muro!" (modo `automatic`) o "¡Gracias! Tu idea quedó pendiente de aprobación." (modo `approval`).
 
-> ⚠️ **Problema funcional pendiente (D4):** el servidor **distingue** entre idea publicada y pendiente de aprobación, pero la UI muestra **siempre** "Está esperando su turno para aparecer en el muro". En modo `automatic` el mensaje es incorrecto (la idea ya está en el muro) y en modo `approval` es ambiguo. **Documentado, no corregido.** Ver §5 y §9.
+> ✅ **Problema funcional D4 cerrado (2026-10-16, tarea T7):** `idea-form.tsx` dejó de reconstruir el mensaje por subcadena (`includes("aprobaci")`) y ahora muestra el mensaje del servidor tal cual. Validado en local en ambos modos: mensajes exactos y estados reales `published`/`pending` coincidentes entre panel y SQL (ver §8.2). Limitación: Chrome headless local; sin pruebas en otros navegadores ni dispositivos móviles.
 
 ---
 
@@ -234,6 +232,15 @@ Realizada el 08/10/2026 salvo donde se indica:
 
 Esta ejecución no valida FIFO bajo concurrencia, reconexión de red, volumen de más de 48 ideas, flujo visual completo del formulario, QR en celular, serialización HTML/RSC ni la matriz completa de permisos RLS.
 
+**Validación T7/D4 (2026-10-16, posterior).** Contra el mismo Supabase local, en Chrome headless, se crearon dos actividades sintéticas (modos `automatic` y `approval`) y se envió una idea en cada una desde contexto anónimo:
+
+- Modo `automatic`: el bloque de éxito mostró exactamente "¡Tu idea ya está en el muro!"; la idea quedó `status = published`, visible en el panel bajo "En el muro".
+- Modo `approval`: mostró exactamente "¡Gracias! Tu idea quedó pendiente de aprobación."; la idea quedó `status = pending`, bajo "Por revisar" con botones de moderación.
+- Coincidencia mensaje ↔ estado real verificada en el panel y por SQL de solo lectura; no apareció el texto erróneo "Está esperando su turno…".
+- Evidencias (capturas de pantalla y JSON de pasos) en el directorio temporal fuera del repositorio: `C:\Users\lucas\AppData\Local\Temp\opencode\t7val\`. No se copiaron al repo.
+- Datos sintéticos conservados (cuenta `org-t7val-…@synthetic.local`, actividades `PRUEBA-T7-AUTO-…` y `PRUEBA-T7-APPROVAL-…` con sus ideas). Sin cambios en producción ni sobre datos preexistentes.
+- Limitaciones: Chrome headless local; sin pruebas en otros navegadores ni en dispositivo móvil. Cierra D4/T7; no valida A1 completa.
+
 ### 8.3 Pendiente de validación (lista de trabajo)
 
 1. Ciclo completo: idea nueva → cola → featured (8 s) → transición (700 ms) → muro.
@@ -267,7 +274,7 @@ Lista concreta y verificable. Todos están **pendientes de validación manual** 
 | A8 | **Recuperación ante reconexión** | Tras perder red ≥30 s, al reconectar: ideas perdidas entran a la cola y se presentan; no hay duplicados ni pérdidas. | Implementado · pendiente de validar |
 | A9 | **Límite visual** | Con >48 ideas publicadas, el DOM muestra ≤48 tarjetas y la carga inicial no crece con el histórico. | Implementado · pendiente de validar con volumen |
 
-Criterio transversal: el mensaje de éxito debe reflejar el estado real de la idea (publicada vs pendiente de aprobación) — **no cumplido hoy** (D4).
+Criterio transversal: el mensaje de éxito debe reflejar el estado real de la idea (publicada vs pendiente de aprobación) — **cumplido desde el cierre de D4/T7 (2026-10-16)**; la validación completa de A1 sigue pendiente.
 
 ---
 
@@ -287,7 +294,7 @@ Criterio transversal: el mensaje de éxito debe reflejar el estado real de la id
 | UX de envío (spinner, bloqueo, confirmación real, contenido ante error) | ✅ Implementado |
 | Correcciones de robustez P0 (§6) | ✅ Implementado |
 | **Validación funcional manual del MVP** (§8.3, criterios A1-A9) | ⬜ **Pendiente — es la puerta de salida del P0** |
-| **D4: mensaje de éxito correcto según estado de la idea** | ⬜ Pendiente (problema funcional, §7) |
+| **D4: mensaje de éxito correcto según estado de la idea** | ✅ Cerrado 2026-10-16 (T7; corregido en `idea-form.tsx` y validado en ambos modos, §8.2) |
 
 ### P1 — necesario para robustez (antes de un evento real)
 
@@ -316,14 +323,14 @@ Sin CI (`biome check` + `tsc --noEmit` + `next build`) · checks de ownership en
 
 ## 11. Discrepancias encontradas (trazabilidad)
 
-Se corrigieron las discrepancias D5 y D7 en la implementación; D1–D4, D6 y D8 siguen abiertas. D9 describe el estado histórico anterior a los commits.
+Se corrigieron las discrepancias D5 y D7 en la implementación; D4 se cerró el 2026-10-16 (T7, validado en local); D1–D3, D6 y D8 siguen abiertas. D9 describe el estado histórico anterior a los commits.
 
 | # | Discrepancia | Realidad actual |
 | --- | --- | --- |
 | **D1** | `docs/evaluacion-cola-de-presentacion.md` declara en su encabezado **"Estado: Propuesta arquitectónica evaluable (no implementada)"**. | La propuesta está **parcialmente implementada** en el working tree (P0 completo + parte de P1: resync, single-flight, moderación por reconciliación). El encabezado está **desactualizado**. **No se modificó el archivo**; queda pendiente decidir si actualizarlo, archivarlo o reemplazarlo. |
 | **D2** | La decisión A5 de la evaluación prevé refetch "al (re)conectar **y periódico/en foco**". | Sólo hay refetch al `SUBSCRIBED` y cada 10 s. **No existe** `visibilitychange`/refetch al recuperar foco (`live-wall.tsx` sin esas referencias). |
 | **D3** | El código cita "Sección 8.2 / 10.1 / 11", invariantes `I4`, `I5`, `I7`, `I8`, `I9`, `CA-1`, `CA-11`, `H-03`. | Esas secciones e invariantes pertenecen al documento funcional *Modelo de presentación y cola de ideas*, **que no existe en el repo**. La trazabilidad del código queda rota. |
-| **D4** | **Problema funcional pendiente.** `submitIdeaAction` devuelve un mensaje diferenciado según `idea_status` ("¡Tu idea ya está en el muro!" vs "…pendiente de aprobación"), pero `idea-form.tsx:240-244` muestra **siempre** "Está esperando su turno para aparecer en el muro"; el texto del servidor sólo se usa como booleano. | En modo `automatic` se informa mal (la idea ya está publicada); en modo `approval` el mensaje es ambiguo. **Documentado, no corregido.** |
+| **D4** | `submitIdeaAction` devuelve un mensaje diferenciado según `idea_status` ("¡Tu idea ya está en el muro!" vs "…pendiente de aprobación"), pero la UI reconstruía el texto en el cliente por subcadena (`includes("aprobaci")`) y mostraba siempre "Está esperando su turno para aparecer en el muro". | **Corregido y validado (2026-10-16, T7).** `idea-form.tsx:241` muestra ahora el `state.success` del servidor textualmente. Validado en local (Chrome headless): modo `automatic` → "¡Tu idea ya está en el muro!" + estado `published`; modo `approval` → "¡Gracias! Tu idea quedó pendiente de aprobación." + estado `pending`; panel y SQL coinciden (§8.2). Limitación: sin pruebas en otros navegadores ni dispositivos móviles. |
 | **D5** | La evaluación clasifica el límite de ideas por participante (A8/P1.4) como **previo a exponer el muro en un evento real**. | Corregido: `submit_idea` limita a cinco aceptaciones por participante y actividad en 60 s; validado en Supabase local. Sigue pendiente evaluar si ese umbral es adecuado para un evento real. |
 | **D6** | `docs/arquitectura.md` describe el muro como "actualización en vivo" sin cola, featured, transición ni límite de 48. | El documento no refleja el modelo actual (era P3.4; sigue pendiente). |
 | **D7** | La RPC no tenía dedupe de contenido ni límite de envíos. | Corregido: `submit_idea` normaliza y deduplica contenido y aplica el límite documentado en D5; ambas respuestas se verificaron en Supabase local. La idempotencia de reintentos de transporte sigue sin estar garantizada. |
