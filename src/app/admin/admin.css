@@ -1,0 +1,333 @@
+/* Estilos específicos para la interfaz de Administración Global (/admin) */
+
+.admin-badge-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: #d1d5db;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.admin-badge-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.admin-phase-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid #d9d5c5;
+  border-left: 4px solid #719153;
+  border-radius: 4px;
+  background: #faf8f2;
+  margin-bottom: 34px;
+}
+
+.admin-rls-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid #e0ddd0;
+  border-left: 4px solid #8c9088;
+  border-radius: 4px;
+  background: #f7f6f0;
+  margin-bottom: 20px;
+}
+
+.admin-error-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px solid #e5c2be;
+  border-left: 4px solid #c25447;
+  border-radius: 4px;
+  background: #fdf5f4;
+  margin-bottom: 20px;
+}
+
+.admin-notice-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.admin-phase-notice-content h4,
+.admin-rls-notice h4,
+.admin-error-notice h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-error-notice h4 {
+  color: #923226;
+}
+
+.admin-phase-notice-content p,
+.admin-rls-notice p,
+.admin-error-notice p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.admin-error-notice p {
+  color: #7d3328;
+}
+
+.admin-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 38px;
+}
+
+.admin-metric-card {
+  padding: 20px;
+  border: 1px solid #e2e0d6;
+  border-radius: 6px;
+  background: #fffefa;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #70766f;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-metric-value {
+  font-family: Georgia, serif;
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1.2;
+  margin: 8px 0 4px;
+}
+
+.admin-metric-subtext {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8c9088;
+}
+
+.admin-section {
+  margin-top: 48px;
+}
+
+.admin-table-container {
+  overflow-x: auto;
+  border: 1px solid #e2e0d6;
+  border-radius: 6px;
+  background: #fffefa;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.admin-table th {
+  padding: 14px 18px;
+  background: #f7f5ee;
+  border-bottom: 1px solid #e2e0d6;
+  font-size: 11px;
+  font-weight: 700;
+  color: #555c53;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-table td {
+  padding: 16px 18px;
+  border-bottom: 1px solid #edebe3;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-table tr:hover td {
+  background: #faf9f4;
+}
+
+.admin-table-title {
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+
+.admin-table-desc {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-badge-soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: #ebe9de;
+  color: #6a7065;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.admin-badge-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: #f2e6e3;
+  color: #924b3c;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.admin-btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid #d5d3c7;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.admin-btn-action:hover:not(:disabled) {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.admin-btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.admin-action-disabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #dedcd3;
+  border-radius: 4px;
+  background: #f4f3ec;
+  color: #8c9088;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: not-allowed;
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.admin-table-blueprint-footer {
+  padding: 12px 18px;
+  background: #f9f8f3;
+  border-top: 1px dashed #e2e0d6;
+  font-size: 11px;
+  color: #7a7f76;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.admin-roadmap-card {
+  padding: 24px;
+  border: 1px dashed #d5d3c7;
+  border-radius: 6px;
+  background: #faf8f2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 160px;
+  position: relative;
+  opacity: 0.92;
+}
+
+.admin-roadmap-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.admin-roadmap-card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #373d35;
+}
+
+.admin-roadmap-card p {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.admin-roadmap-footer {
+  font-size: 11px;
+  color: #8a8f85;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
