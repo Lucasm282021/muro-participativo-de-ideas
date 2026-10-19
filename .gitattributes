@@ -1,0 +1,4 @@
+# Finales de línea estables (LF) para el módulo de Administración — P1-R46
+src/app/admin/**            text eol=lf
+src/lib/auth/admin.ts       text eol=lf
+tests/admin-static.test.mjs text eol=lf
