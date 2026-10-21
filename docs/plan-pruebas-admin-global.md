@@ -4,7 +4,8 @@
 **Rama:** `feat/pagina-administracion-from-dev`  
 **Commit base / HEAD:** `0a12e2a95d8f6234070d2480f2f3817f6b51143c`  
 **Estado:** Documento de diseño de pruebas (solo lectura). No ejecutado.  
-**Documento de referencia:** `docs/plan-admin-global.md`
+**Documento de referencia:** `docs/plan-admin-global.md`  
+**Actualización P1-R97:** Migración aditiva `20261021140000_audit_cascade_counts_v2.sql` aplica el contrato v2 del payload `activity_delete_cascade` (conteos exactos e independientes de ideas/participantes/idea_authors, `contract_version: 2`), calculados en `BEFORE DELETE` del padre (independientes del orden de cascada). Los eventos históricos carecen de `contract_version` y se consideran versión 1.
 
 ---
 
@@ -97,7 +98,7 @@ Para garantizar un entorno higiénico, reproducible y exento de contaminación c
     4. Se verifica que en `audit_logs`: `actor_id IS NULL` (por `ON DELETE SET NULL`), pero `payload->>'actor_id_snapshot'` **persiste intacto con el UUID histórico**.
   - **Borrado individual vs Cascada:**
     1. Borrado individual de idea (`DELETE FROM ideas WHERE id = ...`): se registra 1 evento `idea_delete_individual`.
-    2. Borrado de actividad en cascada (`DELETE FROM activities WHERE id = ...`): se registra exactamente 1 evento `activity_delete` y **cero** eventos `idea_delete_individual` (gracias a `IF parent_exists THEN...`).
+    2. Borrado de actividad en cascada (`DELETE FROM activities WHERE id = ...`): se registra exactamente 1 evento `activity_delete_cascade` con `contract_version: 2` y los tres conteos exactos; **cero** eventos `idea_delete_individual`. La discriminación se realiza mediante la presencia del contexto transaccional `audit_cascade_context` (clave `(activity_id, tx_id)`).
   - **Atomicidad transaccional:** La mutación y el registro en `audit_logs` ocurren en la misma transacción síncrona; si el trigger falla, la mutación completa se revierte.
 - **Criterio de parada:** Cualquier acceso administrativo no autorizado permitido, fallo de snapshot o regresión en el flujo de organizadores.
 
@@ -392,8 +393,8 @@ Con la preparación del DDL en `20261018040000_admin_global_authorization.sql`, 
 | :--- | :--- | :--- | :--- | :--- |
 | **AUDIT-DYN-01** | Triggers / Bitácora | Usuario A muta estado de actividad ajena (`status = 'closed'`) | Se inserta exactamente 1 fila en `public.audit_logs` con `action = 'activity_status_change'` | `payload` incluye `'actor_id_snapshot': <UUID_A>`, `old_status`, `new_status` y marcas de tiempo. |
 | **AUDIT-DYN-02** | Triggers / Bitácora | Usuario A modera idea ajena (`status = 'hidden'`) | Se inserta exactamente 1 fila en `public.audit_logs` con `action = 'idea_moderate_status'` | `payload` incluye `'actor_id_snapshot': <UUID_A>`, `activity_id`, `old_status`, `new_status` y `content_length`. |
-| **AUDIT-DYN-03** | Triggers / Integridad | Usuario A elimina idea individualmente (`DELETE FROM ideas WHERE id = ...`) | Se inserta exactamente 1 fila en `public.audit_logs` con `action = 'idea_delete_individual'` | La condición `parent_exists` evalúa a `true` al existir la actividad padre. |
-| **AUDIT-DYN-04** | Triggers / Supresión | Usuario A elimina actividad raíz (`DELETE FROM activities WHERE id = ...`) | Se inserta exactamente 1 fila con `action = 'activity_delete'`; **cero filas** de `idea_delete_individual` | `parent_exists` evalúa a `false` durante la cascada interna de PostgreSQL, suprimiendo duplicados. |
+| **AUDIT-DYN-03** | Triggers / Integridad | Usuario A elimina idea individualmente (`DELETE FROM ideas WHERE id = ...`) | Se inserta exactamente 1 fila en `public.audit_logs` con `action = 'idea_delete_individual'` | Sin contexto transaccional de cascada para la actividad → discriminación correcta. |
+| **AUDIT-DYN-04** | Triggers / Supresión | Usuario A elimina actividad raíz (`DELETE FROM activities WHERE id = ...`) | Se inserta exactamente 1 fila con `action = 'activity_delete_cascade'` y `contract_version: 2` con los tres conteos; **cero filas** de `idea_delete_individual` | Contexto presente en la transacción (clave `(activity_id,tx_id)`) → discriminación correcta; conteos calculados en `BEFORE DELETE` del padre, independientes del orden de cascada. |
 | **AUDIT-DYN-05** | Integridad Referencial | Se elimina la cuenta de Usuario A en `auth.users` (`DELETE FROM auth.users WHERE id = <UUID_A>`) | En `public.audit_logs`: columna `actor_id` pasa a `NULL` (`ON DELETE SET NULL`), pero `payload->>'actor_id_snapshot'` **permanece intacto** | Preservación de la referencia histórica de identidad ante purga de usuarios sin violar constraints. |
 | **AUDIT-DYN-06** | Atomicidad ACID | Se intenta forzar una excepción durante la mutación de una actividad | Si la sentencia aborta, no se registra ninguna fila huérfana en `public.audit_logs` | Mutación y auditoría residen en la misma transacción relacional (`AFTER UPDATE/DELETE`). |
 
