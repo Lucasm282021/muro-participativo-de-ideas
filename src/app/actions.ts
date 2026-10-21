@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getBaseUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
+import { ideaSchema, resolveSubmitIdeaOutcome } from "./idea-schema";
 
 export type FormState = { error?: string; success?: string };
 
@@ -205,16 +206,6 @@ export async function createActivityAction(
   redirect(`/panel/actividad/${data.id}`);
 }
 
-const ideaSchema = z.object({
-  first_name: z.string().trim().min(1, "Ingresá tu nombre.").max(100),
-  last_name: z.string().trim().min(1, "Ingresá tu apellido.").max(100),
-  email: z.email("Ingresá un email válido.").max(254),
-  content: z
-    .string()
-    .trim()
-    .min(1, "Escribí una idea.")
-    .max(500, "La idea no puede superar los 500 caracteres."),
-});
 
 export async function submitIdeaAction(
   publicCode: string,
@@ -237,17 +228,15 @@ export async function submitIdeaAction(
     participant_email: parsed.data.email,
     idea_content: parsed.data.content,
   });
-  if (error || !data?.length)
-    return {
-      error:
-        "La actividad ya no recibe ideas o hubo un problema. Volvé a intentarlo.",
-    };
-  return {
-    success:
-      data[0].idea_status === "published"
-        ? "¡Tu idea ya está en el muro!"
-        : "¡Gracias! Tu idea quedó pendiente de aprobación.",
-  };
+  const outcome = resolveSubmitIdeaOutcome(data, error);
+  if (outcome.error) return { error: outcome.error };
+
+  if (outcome.revalidate) {
+    revalidatePath("/panel");
+    revalidatePath("/panel/actividad/[id]", "page");
+  }
+
+  return { success: outcome.success };
 }
 
 const moderateIdeaSchema = z.object({

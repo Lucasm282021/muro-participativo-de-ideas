@@ -34,7 +34,7 @@ npm run supabase:start
 Al iniciar Supabase local, copiá el API URL y la publishable key que informa la CLI a un archivo `.env.local` en la raíz:
 
 ```dotenv
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:25435
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_publishable_key_local
 ```
 
@@ -49,9 +49,9 @@ npm run dev
 ```
 
 - Aplicación: <http://localhost:3000>
-- Supabase Studio: <http://127.0.0.1:54323>
-- Bandeja local de emails de prueba: <http://127.0.0.1:54324>
-- API local: <http://127.0.0.1:54321>
+- Supabase Studio: <http://127.0.0.1:25434>
+- Bandeja local de emails de prueba: <http://127.0.0.1:25436>
+- API local: <http://127.0.0.1:25435>
 
 Creá el primer organizador en `/crear-cuenta`. En Supabase local la confirmación de email está desactivada. Los enlaces de recuperación enviados localmente se consultan en la bandeja de prueba; no se envían a Internet.
 

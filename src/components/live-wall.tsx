@@ -22,7 +22,6 @@ import {
   RESYNC_INTERVAL_MS,
   readStoredCursor,
   removeIdea,
-  startNextFeatured,
   TRANSITION_DURATION_MS,
   transitionFeatured,
 } from "@/lib/presentation";
@@ -200,9 +199,18 @@ export function LiveWall({
   }, []);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPromotingRef = useRef<boolean>(false);
-  const inFlightRef = useRef<boolean>(false);
-  const pendingRerunRef = useRef<boolean>(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promotingOwnerGenRef = useRef<number | null>(null);
+  const reconcileOwnerGenRef = useRef<number | null>(null);
+  const reconcilePendingGenRef = useRef<number | null>(null);
+  const verificationAttemptsRef = useRef<Map<string, number>>(new Map());
+  const catchUpFailuresRef = useRef<number>(0);
+  const isMountedRef = useRef<boolean>(true);
+  const activityGenerationRef = useRef<number>(0);
+  const activityIdRef = useRef<string>(activityId);
+  const publicCodeRef = useRef<string>(publicCode);
+  const initialIdeasRef = useRef<Idea[]>(initialIdeas);
+  const previousContextKeyRef = useRef<string | null>(null);
 
   const clearPresentationTimer = useCallback(() => {
     if (timerRef.current) {
@@ -211,191 +219,418 @@ export function LiveWall({
     }
   }, []);
 
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  // 1. Ciclo de vida de montaje / desmontaje general del componente
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // 2. Sincronización continua de referencias para callbacks estables (sin reiniciar contexto)
+  useEffect(() => {
+    activityIdRef.current = activityId;
+    publicCodeRef.current = publicCode;
+    initialIdeasRef.current = initialIdeas;
+  }, [activityId, publicCode, initialIdeas]);
+
   // Declaración diferida de requestReconcile mediante ref para romper ciclos con promoteNext
   const requestReconcileRef = useRef<() => void>(() => {});
 
   const promoteNext = useCallback(async () => {
-    if (isPromotingRef.current) return;
+    if (!isMountedRef.current) return;
+    const gen = activityGenerationRef.current;
+    const currentActivityId = activityIdRef.current;
+    const currentPublicCode = publicCodeRef.current;
+
+    // Propiedad de la cerradura: si otra operación ya posee la cerradura, no intervenir
+    if (promotingOwnerGenRef.current !== null) return;
     if (stateRef.current.featured !== null) return;
 
     if (stateRef.current.queue.length === 0) {
       // Estado IDLE: activar resync como indica la sección 13
-      requestReconcileRef.current();
+      if (activityGenerationRef.current === gen) {
+        requestReconcileRef.current();
+      }
       return;
     }
 
-    isPromotingRef.current = true;
+    promotingOwnerGenRef.current = gen;
+    try {
+      // Catch-up antes de promoción: mientras watermark < head, descubrir contiguamente
+      while (true) {
+        if (!isMountedRef.current || activityGenerationRef.current !== gen) {
+          return;
+        }
 
-    // Catch-up antes de promoción: mientras watermark < head, descubrir contiguamente
-    while (true) {
-      const currentHead = stateRef.current.queue[0];
-      if (!currentHead) break;
+        const currentHead = stateRef.current.queue[0];
+        if (!currentHead) break;
+
+        const currentWm = watermarkRef.current;
+        // Si watermark ya cubre o supera la cabeza (watermark >= head), el catch-up está completo
+        if (currentWm && compareIdeaWithCursor(currentHead, currentWm) <= 0) {
+          break;
+        }
+
+        let catchUpFailed = false;
+        try {
+          const supabase = createClient();
+          let catchUpQuery = supabase
+            .from("ideas")
+            .select(
+              "id, activity_id, content, status, created_at, published_at",
+            )
+            .eq("activity_id", activityIdRef.current)
+            .eq("status", "published")
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .limit(BATCH_CAP);
+
+          if (currentWm) {
+            catchUpQuery = catchUpQuery.or(
+              currentWm.id
+                ? `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`
+                : `created_at.gt.${currentWm.createdAt}`,
+            );
+          }
+
+          const { data: catchUpData, error: catchUpError } = await catchUpQuery;
+
+          if (!isMountedRef.current || activityGenerationRef.current !== gen) {
+            return;
+          }
+
+          if (catchUpError || !catchUpData) {
+            catchUpFailed = true;
+          } else {
+            const catchUpIdeas = catchUpData as Idea[];
+            if (catchUpIdeas.length === 0) {
+              // Cero filas posteriores al watermark: la contigüidad NO queda demostrada.
+              // FIFO ESTRICTO: no promover ni diferir la cabeza. Se sale del catch-up y el
+              // gate de contigüidad programa un reintento con backoff acotado.
+              break;
+            }
+
+            const lastCaught = catchUpIdeas[catchUpIdeas.length - 1];
+            watermarkRef.current = maxCursor(watermarkRef.current, lastCaught);
+
+            const fresh = stateRef.current;
+            const activeIds = new Set<string>();
+            for (const item of fresh.wall) activeIds.add(item.id);
+            for (const item of fresh.queue) activeIds.add(item.id);
+            if (fresh.featured) activeIds.add(fresh.featured.idea.id);
+
+            const updatedQueue = enqueueIdeas(
+              fresh.queue,
+              catchUpIdeas,
+              activeIds,
+            );
+            stateRef.current.queue = updatedQueue;
+            setQueue(updatedQueue);
+
+            if (catchUpIdeas.length < BATCH_CAP) {
+              break;
+            }
+          }
+        } catch {
+          catchUpFailed = true;
+        }
+
+        if (catchUpFailed) {
+          // El catch-up falló por error de red o consulta; salir para activar el gate de contigüidad
+          break;
+        }
+      }
+
+      if (!isMountedRef.current || activityGenerationRef.current !== gen) {
+        return;
+      }
+
+      // 4. Gate de contigüidad del catch-up:
+      // Antes de cualquier promoción, DEMOSTRAR que el watermark cubre la cabeza según compareIdeaWithCursor.
+      const headAfterCatchUp = stateRef.current.queue[0];
+      if (!headAfterCatchUp) {
+        // La cola quedó vacía tras el catch-up
+        if (activityGenerationRef.current === gen) {
+          requestReconcileRef.current();
+        }
+        return;
+      }
 
       const currentWm = watermarkRef.current;
-      // Si watermark ya cubre o supera la cabeza (watermark >= head), el catch-up está completo
-      if (currentWm && compareIdeaWithCursor(currentHead, currentWm) <= 0) {
-        break;
+      const isContiguityCovered =
+        currentWm !== null &&
+        compareIdeaWithCursor(headAfterCatchUp, currentWm) <= 0;
+
+      if (!isContiguityCovered) {
+        // Si el watermark no cubre la cabeza (lote incompleto, 0 filas o fallo de consulta),
+        // NO promover. Programar reintento diferido con backoff progresivo sin duplicar.
+        const failures = catchUpFailuresRef.current + 1;
+        catchUpFailuresRef.current = failures;
+        const delay = Math.min(
+          1500 * 1.5 ** (failures - 1),
+          RESYNC_INTERVAL_MS,
+        );
+        clearRetryTimer();
+        const scheduledGen = gen;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return;
+          }
+          void promoteNext();
+        }, delay);
+        return;
       }
 
-      let catchUpFailed = false;
+      // Contigüidad demostrada: restablecer contador de fallos de catch-up
+      catchUpFailuresRef.current = 0;
+
+      const nextCandidate = headAfterCatchUp;
+      const candidateId = nextCandidate.id;
+
+      // Validación de featured: guardFeatured(id) (Sección 11) - Fail-Closed
+      type VerificationOutcome =
+        | { kind: "approved" }
+        | { kind: "rejected" }
+        | { kind: "unverified" }
+        | { kind: "transient_error"; error: unknown };
+
+      let outcome: VerificationOutcome;
       try {
         const supabase = createClient();
-        let catchUpQuery = supabase
+        const { data: verified, error: verifyError } = await supabase
           .from("ideas")
-          .select("id, activity_id, content, status, created_at, published_at")
-          .eq("activity_id", activityId)
-          .eq("status", "published")
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .limit(BATCH_CAP);
+          .select("id, status")
+          .eq("activity_id", currentActivityId)
+          .eq("id", candidateId)
+          .maybeSingle();
 
-        if (currentWm) {
-          catchUpQuery = catchUpQuery.or(
-            `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`,
-          );
-        }
-
-        const { data: catchUpData, error: catchUpError } = await catchUpQuery;
-        if (catchUpError || !catchUpData) {
-          catchUpFailed = true;
+        if (verifyError) {
+          outcome = { kind: "transient_error", error: verifyError };
+        } else if (!verified) {
+          // data: null -> ausencia de autorización en este momento
+          outcome = { kind: "unverified" };
+        } else if (verified.status === "published") {
+          outcome = { kind: "approved" };
         } else {
-          const catchUpIdeas = catchUpData as Idea[];
-          if (catchUpIdeas.length === 0) {
-            break;
-          }
-
-          const lastCaught = catchUpIdeas[catchUpIdeas.length - 1];
-          watermarkRef.current = {
-            createdAt: lastCaught.created_at,
-            id: lastCaught.id,
-          };
-
-          const fresh = stateRef.current;
-          const activeIds = new Set<string>();
-          for (const item of fresh.wall) activeIds.add(item.id);
-          for (const item of fresh.queue) activeIds.add(item.id);
-          if (fresh.featured) activeIds.add(fresh.featured.idea.id);
-
-          const updatedQueue = enqueueIdeas(
-            fresh.queue,
-            catchUpIdeas,
-            activeIds,
-          );
-          stateRef.current.queue = updatedQueue;
-          setQueue(updatedQueue);
-
-          if (catchUpIdeas.length < BATCH_CAP) {
-            break;
-          }
+          // verified.status !== "published" (status confirmado no elegible: hidden o pending)
+          outcome = { kind: "rejected" };
         }
-      } catch {
-        catchUpFailed = true;
+      } catch (err) {
+        outcome = { kind: "transient_error", error: err };
       }
 
-      if (catchUpFailed) {
-        break;
+      if (!isMountedRef.current || activityGenerationRef.current !== gen) {
+        return;
       }
-    }
 
-    // Verificar si la cola aún tiene elementos tras el catch-up
-    if (stateRef.current.queue.length === 0) {
-      isPromotingRef.current = false;
-      requestReconcileRef.current();
-      return;
-    }
-
-    const nextCandidate = stateRef.current.queue[0];
-
-    // Validación de featured: guardFeatured(id) (Sección 11)
-    let isApproved = true;
-    try {
-      const supabase = createClient();
-      const { data: verified, error: verifyError } = await supabase
-        .from("ideas")
-        .select("id, status")
-        .eq("id", nextCandidate.id)
-        .maybeSingle();
-
-      if (!verifyError) {
-        if (verified?.status !== "published") {
-          isApproved = false;
-        }
-      }
-    } catch {
-      // Error de red puntual: no bloquear presentación, cursor no avanzará si watermark no cubre
-    }
-
-    if (!isApproved) {
-      // Idea moderada/eliminada en cola profunda: remover y pasar a la siguiente
-      const remaining = stateRef.current.queue.filter(
-        (i) => i.id !== nextCandidate.id,
-      );
-      stateRef.current.queue = remaining;
-      setQueue(remaining);
-      isPromotingRef.current = false;
-      void promoteNext();
-      return;
-    }
-
-    // Promoción a featured
-    const { nextFeatured, remainingQueue } = startNextFeatured(
-      stateRef.current.queue,
-    );
-    stateRef.current.queue = remainingQueue;
-    stateRef.current.featured = nextFeatured;
-    setQueue(remainingQueue);
-    setFeatured(nextFeatured);
-    isPromotingRef.current = false;
-
-    if (!nextFeatured) {
-      requestReconcileRef.current();
-      return;
-    }
-
-    // Ciclo de presentación: HOLD 8s -> TRANSICIÓN 700ms -> COMPLETION
-    clearPresentationTimer();
-    timerRef.current = setTimeout(() => {
-      setFeatured((prev) => {
-        const next = transitionFeatured(prev);
-        stateRef.current.featured = next;
-        return next;
-      });
-
-      timerRef.current = setTimeout(() => {
-        clearPresentationTimer();
-        const completed = stateRef.current.featured;
-        if (!completed) return;
-
-        // 1. Mover al muro
-        const nextWall = completeFeatured(
-          stateRef.current.wall,
-          completed,
-          MAX_WALL_CARDS,
-        );
-        stateRef.current.wall = nextWall;
-        stateRef.current.featured = null;
-        setWall(nextWall);
-        setFeatured(null);
-
-        // 2. Avanzar cursor SOLO SI watermark >= completed.idea (I5)
-        const currentWm = watermarkRef.current;
+      // Re-validación de identidad del candidato y estado de presentación tras el await
+      const currentHead = stateRef.current.queue[0];
+      if (!currentHead || currentHead.id !== candidateId) {
+        // La cabeza cambió concurrentemente durante la verificación.
+        // FIFO ESTRICTO: no promover candidateId (se saltaría la nueva cabeza).
+        // Para no dejar la cola detenida, si no hay destacada y hay cola pendiente, reintentar promoción.
         if (
-          currentWm &&
-          compareIdeaWithCursor(completed.idea, currentWm) <= 0
+          stateRef.current.featured === null &&
+          stateRef.current.queue.length > 0
         ) {
-          const newCursor = maxCursor(cursorRef.current, completed.idea);
-          cursorRef.current = newCursor;
-          persistCursor(sessionStorage, publicCode, newCursor);
+          const scheduledGen = gen;
+          clearRetryTimer();
+          // Reintento acotado (50 ms) para evitar tormenta de reintentos inmediatos
+          // permitiendo que el estado se estabilice antes de evaluar la nueva cabeza
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            if (
+              !isMountedRef.current ||
+              activityGenerationRef.current !== scheduledGen
+            ) {
+              return;
+            }
+            void promoteNext();
+          }, 50);
+        }
+        return;
+      }
+      if (stateRef.current.featured !== null) {
+        // Ya existe una idea destacada activa en la presentación
+        return;
+      }
+
+      // Manejo según el resultado de la verificación
+      if (outcome.kind === "rejected") {
+        // Idea moderada/eliminada confirmada: remover de cola y procesar siguiente
+        verificationAttemptsRef.current.delete(candidateId);
+        clearRetryTimer();
+        const remaining = stateRef.current.queue.filter(
+          (i) => i.id !== candidateId,
+        );
+        stateRef.current.queue = remaining;
+        setQueue(remaining);
+        const scheduledGen = gen;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return;
+          }
+          void promoteNext();
+        }, 50);
+        return;
+      }
+
+      if (outcome.kind === "unverified") {
+        // Fila ausente: fail-closed. No se interpreta como prueba definitiva de moderación.
+        // FIFO ESTRICTO: la cabeza NO se retira ni se difiere. Permanece en cola y se
+        // reintenta con backoff acotado hasta demostrar contigüidad/publicación.
+        const attempts =
+          (verificationAttemptsRef.current.get(candidateId) ?? 0) + 1;
+        verificationAttemptsRef.current.set(candidateId, attempts);
+        const delay = Math.min(
+          2000 * 1.5 ** (attempts - 1),
+          RESYNC_INTERVAL_MS,
+        );
+        clearRetryTimer();
+        const scheduledGen = gen;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return;
+          }
+          void promoteNext();
+        }, delay);
+        return;
+      }
+
+      if (outcome.kind === "transient_error") {
+        // Error de red / consulta: fail-closed.
+        // Conservar cola intacta a la cabeza para preservar FIFO y programar reintento con backoff.
+        const attempts =
+          (verificationAttemptsRef.current.get(candidateId) ?? 0) + 1;
+        verificationAttemptsRef.current.set(candidateId, attempts);
+
+        const delay = Math.min(
+          1500 * 1.5 ** (attempts - 1),
+          RESYNC_INTERVAL_MS,
+        );
+        clearRetryTimer();
+        const scheduledGen = gen;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return;
+          }
+          void promoteNext();
+        }, delay);
+        return;
+      }
+
+      // Promoción a featured: únicamente en outcome.kind === "approved"
+      verificationAttemptsRef.current.delete(candidateId);
+      clearRetryTimer();
+      const remainingQueue = stateRef.current.queue.filter(
+        (i) => i.id !== candidateId,
+      );
+      const nextFeatured: FeaturedItem = {
+        idea: nextCandidate,
+        phase: "holding",
+      };
+      stateRef.current.queue = remainingQueue;
+      stateRef.current.featured = nextFeatured;
+      setQueue(remainingQueue);
+      setFeatured(nextFeatured);
+
+      // Ciclo de presentación: HOLD 8s -> TRANSICIÓN 700ms -> COMPLETION
+      clearPresentationTimer();
+      const scheduledGen = gen;
+      timerRef.current = setTimeout(() => {
+        if (
+          !isMountedRef.current ||
+          activityGenerationRef.current !== scheduledGen
+        ) {
+          return;
         }
 
-        // 3. Siguiente idea o idle
-        void promoteNext();
-      }, TRANSITION_DURATION_MS);
-    }, HOLD_DURATION_MS);
-  }, [activityId, publicCode, clearPresentationTimer]);
+        setFeatured((prev) => {
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return prev;
+          }
+          const next = transitionFeatured(prev);
+          stateRef.current.featured = next;
+          return next;
+        });
+
+        timerRef.current = setTimeout(() => {
+          if (
+            !isMountedRef.current ||
+            activityGenerationRef.current !== scheduledGen
+          ) {
+            return;
+          }
+
+          clearPresentationTimer();
+          const completed = stateRef.current.featured;
+          if (!completed) return;
+
+          // 1. Mover al muro
+          const nextWall = completeFeatured(
+            stateRef.current.wall,
+            completed,
+            MAX_WALL_CARDS,
+          );
+          stateRef.current.wall = nextWall;
+          stateRef.current.featured = null;
+          setWall(nextWall);
+          setFeatured(null);
+
+          // 2. Avanzar cursor SOLO SI watermark >= completed.idea (I5)
+          const currentWm = watermarkRef.current;
+          if (
+            currentWm &&
+            compareIdeaWithCursor(completed.idea, currentWm) <= 0
+          ) {
+            const newCursor = maxCursor(cursorRef.current, completed.idea);
+            cursorRef.current = newCursor;
+            persistCursor(sessionStorage, currentPublicCode, newCursor);
+          }
+
+          // 3. Siguiente idea o idle
+          void promoteNext();
+        }, TRANSITION_DURATION_MS);
+      }, HOLD_DURATION_MS);
+    } finally {
+      // Propiedad estricta: solo liberar si esta invocación sigue siendo la propietaria
+      if (promotingOwnerGenRef.current === gen) {
+        promotingOwnerGenRef.current = null;
+      }
+    }
+  }, [clearPresentationTimer, clearRetryTimer]);
 
   const executeReconcile = useCallback(async () => {
     try {
+      const gen = activityGenerationRef.current;
+      const currentActivityId = activityIdRef.current;
       const supabase = createClient();
       const currentWm = watermarkRef.current ?? cursorRef.current;
 
@@ -403,7 +638,7 @@ export function LiveWall({
       let discoverQuery = supabase
         .from("ideas")
         .select("id, activity_id, content, status, created_at, published_at")
-        .eq("activity_id", activityId)
+        .eq("activity_id", currentActivityId)
         .eq("status", "published")
         .order("created_at", { ascending: true })
         .order("id", { ascending: true })
@@ -411,29 +646,53 @@ export function LiveWall({
 
       if (currentWm) {
         discoverQuery = discoverQuery.or(
-          `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`,
+          currentWm.id
+            ? `created_at.gt.${currentWm.createdAt},and(created_at.eq.${currentWm.createdAt},id.gt.${currentWm.id})`
+            : `created_at.gt.${currentWm.createdAt}`,
         );
       }
 
-      // 2. Moderación acotada a wall + featured (máximo 49 IDs, Sección 11)
+      // 2. Moderación acotada a máximo 49 IDs (Sección 11)
+      // Priorizar: cabeza de cola activa, idea destacada y muro.
       const snapshot = stateRef.current;
       const activeIdsToCheck: string[] = [];
-      if (snapshot.featured) {
-        activeIdsToCheck.push(snapshot.featured.idea.id);
-      }
-      for (const w of snapshot.wall) {
-        if (activeIdsToCheck.length < 49) {
-          activeIdsToCheck.push(w.id);
+      const added = new Set<string>();
+
+      const addId = (id: string | undefined) => {
+        if (id && !added.has(id) && activeIdsToCheck.length < 49) {
+          added.add(id);
+          activeIdsToCheck.push(id);
         }
+      };
+
+      // Prioridad 1: Cabeza de la cola activa (cupo reservado prioritario)
+      if (snapshot.queue.length > 0) {
+        addId(snapshot.queue[0].id);
+      }
+      // Prioridad 2: Tarjeta destacada
+      if (snapshot.featured) {
+        addId(snapshot.featured.idea.id);
+      }
+      // Prioridad 3: Ideas del muro
+      for (const w of snapshot.wall) {
+        addId(w.id);
+      }
+      // Prioridad 4: Resto de la cola activa hasta agotar el presupuesto de 49 IDs
+      for (let i = 1; i < snapshot.queue.length; i++) {
+        addId(snapshot.queue[i].id);
       }
 
       let moderationQuery = null;
       if (activeIdsToCheck.length > 0) {
+        // Consultar sin filtrar por status="published" para diferenciar:
+        // - status === "published": confirmado publicado
+        // - status !== "published": confirmado moderado/no publicado
+        // - ausencia de fila: fila ausente
         moderationQuery = supabase
           .from("ideas")
           .select("id, status")
-          .in("id", activeIdsToCheck)
-          .eq("status", "published");
+          .eq("activity_id", currentActivityId)
+          .in("id", activeIdsToCheck);
       }
 
       const [discoverResult, moderationResult] = await Promise.all([
@@ -442,6 +701,10 @@ export function LiveWall({
           ? moderationQuery
           : Promise.resolve({ data: [], error: null }),
       ]);
+
+      if (!isMountedRef.current || activityGenerationRef.current !== gen) {
+        return;
+      }
 
       // FRESH SNAPSHOT (I8, CA-1)
       const fresh = stateRef.current;
@@ -452,34 +715,76 @@ export function LiveWall({
         discoveredIdeas = discoverResult.data as Idea[];
         if (discoveredIdeas.length > 0) {
           const lastDiscovered = discoveredIdeas[discoveredIdeas.length - 1];
-          watermarkRef.current = {
-            createdAt: lastDiscovered.created_at,
-            id: lastDiscovered.id,
-          };
+          watermarkRef.current = maxCursor(
+            watermarkRef.current,
+            lastDiscovered,
+          );
         }
       }
 
       // Procesar Moderación solo si la consulta tuvo éxito (I7: Error ≠ Vacío)
       let purgedState = fresh;
       let featuredInterrupted = false;
+
       if (moderationQuery && !moderationResult.error && moderationResult.data) {
-        const confirmedIds = new Set(
-          (moderationResult.data as { id: string }[]).map((r) => r.id),
+        const rows = moderationResult.data as { id: string; status: string }[];
+        const confirmedPublishedIds = new Set<string>();
+        const confirmedModeratedIds = new Set<string>();
+
+        for (const row of rows) {
+          if (row.status === "published") {
+            confirmedPublishedIds.add(row.id);
+          } else {
+            // Estado no publicado confirmado (hidden, pending, rejected)
+            confirmedModeratedIds.add(row.id);
+          }
+        }
+
+        // CONTRATO REAL DE purgeModeratedIdeas (src/lib/presentation.ts):
+        // purgeModeratedIdeas(state, activeIdsQueried, confirmedPublishedIds)
+        // Regla: isModerated(id) = queriedSet.has(id) && !confirmedPublishedIds.has(id).
+        // Todo ID en activeIdsQueried que NO esté en confirmedPublishedIds es purgado de wall y queue.
+        //
+        // 1. Para 'wall' y 'featured': requerimos fail-closed en pantalla. Se incluyen en
+        //    activeIdsQueried para que si ya no están publicadas (o están ausentes), salgan de pantalla.
+        // 2. Para 'queue': la política FIFO estricta PROHÍBE considerar filas ausentes o restricciones
+        //    de RLS como prueba definitiva de moderación. Por ello, las ideas de 'queue' SOLO se
+        //    agregan a activeIdsQueried cuando la consulta devolvió explícitamente un estado no publicado
+        //    confirmado ('confirmedModeratedIds'). Las filas ausentes en cola NO se incluyen en
+        //    activeIdsQueried, preservándolas en cola para reintentos con backoff acotado en guardFeatured.
+        // 3. IDs fuera de cupo (presupuesto <= 49): no se consultaron, por lo que NO se incluyen en
+        //    activeIdsQueried y no se purgan erróneamente por falta de consulta.
+        const queriedIds = new Set(activeIdsToCheck);
+        const idsToPurgeFromPresentation: string[] = [];
+        if (fresh.featured && queriedIds.has(fresh.featured.idea.id)) {
+          idsToPurgeFromPresentation.push(fresh.featured.idea.id);
+        }
+        for (const w of fresh.wall) {
+          if (queriedIds.has(w.id)) idsToPurgeFromPresentation.push(w.id);
+        }
+        for (const modId of confirmedModeratedIds) {
+          idsToPurgeFromPresentation.push(modId);
+        }
+
+        const res = purgeModeratedIdeas(
+          fresh,
+          idsToPurgeFromPresentation,
+          confirmedPublishedIds,
         );
-        const res = purgeModeratedIdeas(fresh, activeIdsToCheck, confirmedIds);
         purgedState = res.nextState;
         featuredInterrupted = res.interrupted;
       }
 
-      // Incorporar ideas descubiertas en la cola fresca sin duplicados
+      // Incorporar ideas descubiertas y recuperadas en la cola fresca sin duplicados
       const activeIds = new Set<string>();
       for (const item of purgedState.wall) activeIds.add(item.id);
       for (const item of purgedState.queue) activeIds.add(item.id);
       if (purgedState.featured) activeIds.add(purgedState.featured.idea.id);
 
+      const ideasToEnqueue = discoveredIdeas;
       const updatedQueue = enqueueIdeas(
         purgedState.queue,
-        discoveredIdeas,
+        ideasToEnqueue,
         activeIds,
       );
 
@@ -500,30 +805,40 @@ export function LiveWall({
       } else if (!purgedState.featured && updatedQueue.length === 0) {
         // Si el batch vino lleno (100), podría haber más ideas pendientes en DB
         if (discoveredIdeas.length === BATCH_CAP) {
-          pendingRerunRef.current = true;
+          reconcilePendingGenRef.current = gen;
         }
       }
     } catch {
       // Error silencioso: no purga ni altera estado (I7)
     }
-  }, [activityId, clearPresentationTimer, promoteNext]);
+  }, [clearPresentationTimer, promoteNext]);
 
-  // Single-flight + pending rerun (Sección 10.1, I9)
+  // Single-flight + pending rerun con propiedad estricta por generación (Sección 10.1, I9)
   const requestReconcile = useCallback(() => {
-    if (inFlightRef.current) {
-      pendingRerunRef.current = true;
+    if (!isMountedRef.current) return;
+    const gen = activityGenerationRef.current;
+
+    if (reconcileOwnerGenRef.current !== null) {
+      reconcilePendingGenRef.current = gen;
       return;
     }
-    inFlightRef.current = true;
+    reconcileOwnerGenRef.current = gen;
 
     const run = async () => {
       try {
         await executeReconcile();
       } finally {
-        inFlightRef.current = false;
-        if (pendingRerunRef.current) {
-          pendingRerunRef.current = false;
-          requestReconcile();
+        if (reconcileOwnerGenRef.current === gen) {
+          reconcileOwnerGenRef.current = null;
+        }
+        // Solo consumir pending rerun si corresponde estrictamente a la generación actual activa
+        if (
+          isMountedRef.current &&
+          reconcilePendingGenRef.current === activityGenerationRef.current &&
+          activityGenerationRef.current === gen
+        ) {
+          reconcilePendingGenRef.current = null;
+          requestReconcileRef.current();
         }
       }
     };
@@ -531,13 +846,18 @@ export function LiveWall({
     void run();
   }, [executeReconcile]);
 
-  // Sincronizar la ref de requestReconcile
+  // Sincronizar la ref de requestReconcile tras cada render (sin mutaciones síncronas en render)
   useEffect(() => {
     requestReconcileRef.current = requestReconcile;
   }, [requestReconcile]);
 
   const handleNewIdea = useCallback(
     (idea: Idea) => {
+      if (!isMountedRef.current) return;
+      // Filtrar ideas pertenecientes a otra actividad
+      if (idea.activity_id && idea.activity_id !== activityIdRef.current) {
+        return;
+      }
       // Realtime sólo encola. NO modifica cursor ni watermark (I4, CA-11)
       const fresh = stateRef.current;
       const activeIds = new Set<string>();
@@ -558,6 +878,7 @@ export function LiveWall({
 
   const handleRemoveIdea = useCallback(
     (ideaId: string) => {
+      if (!isMountedRef.current) return;
       const fresh = stateRef.current;
       const { nextState, interrupted } = removeIdea(fresh, ideaId);
 
@@ -574,67 +895,153 @@ export function LiveWall({
     [clearPresentationTimer, promoteNext],
   );
 
-  // Inicialización de punto cero y recarga (Secciones 3.1, 6)
+  // Gestión del contexto (A -> B, B -> A, recarga y cambio de publicCode)
+  // Depende EXCLUSIVAMENTE de activityId y publicCode (independiente de referencias de initialIdeas).
   useEffect(() => {
+    const currentContextKey = `${activityId}:${publicCode}`;
     setJoinUrl(`${window.location.origin}/a/${publicCode}`);
 
-    const stored = readStoredCursor(sessionStorage, publicCode);
-    if (!stored.exists) {
-      // Primera apertura: Punto cero (sin catch-up histórico)
-      if (initialIdeas.length > 0) {
-        const maxInit = findMaxIdea(initialIdeas);
-        cursorRef.current = maxInit;
-        watermarkRef.current = maxInit;
-        persistCursor(sessionStorage, publicCode, maxInit);
-        const baseline = initialIdeas.slice(0, MAX_WALL_CARDS);
-        stateRef.current.wall = baseline;
-        setWall(baseline);
+    if (previousContextKeyRef.current === null) {
+      // 1. Primera apertura del componente (SSR inicial)
+      previousContextKeyRef.current = currentContextKey;
+      activityGenerationRef.current += 1;
+
+      const initial = initialIdeasRef.current;
+      const stored = readStoredCursor(sessionStorage, publicCode);
+      if (!stored.exists) {
+        // Primera apertura: Punto cero (sin catch-up histórico)
+        if (initial.length > 0) {
+          const maxInit = findMaxIdea(initial);
+          cursorRef.current = maxInit;
+          watermarkRef.current = maxInit;
+          persistCursor(sessionStorage, publicCode, maxInit);
+          const baseline = initial.slice(0, MAX_WALL_CARDS);
+          stateRef.current.wall = baseline;
+          setWall(baseline);
+        } else {
+          // Objetivo 6: Primera apertura sin initialIdeas -> punto cero temporal
+          // para no descubrir accidentalmente todo el histórico de la base de datos.
+          const zeroCursor: Cursor = {
+            createdAt: new Date().toISOString(),
+            id: "",
+          };
+          cursorRef.current = zeroCursor;
+          watermarkRef.current = zeroCursor;
+          persistCursor(sessionStorage, publicCode, zeroCursor);
+          stateRef.current.wall = [];
+          setWall([]);
+        }
       } else {
-        cursorRef.current = null;
-        watermarkRef.current = null;
-        persistCursor(sessionStorage, publicCode, null); // Guarda NULL_MARKER
-        stateRef.current.wall = [];
-        setWall([]);
+        // Recarga de pestaña (H-03): ideas posteriores al cursor son elegibles para presentación
+        cursorRef.current = stored.cursor;
+        watermarkRef.current = stored.cursor;
+
+        if (stored.cursor) {
+          const baseline = initial.filter(
+            (i) => !isAfterCursor(i, stored.cursor),
+          );
+          const pendingFromInitial = initial.filter((i) =>
+            isAfterCursor(i, stored.cursor),
+          );
+
+          const initialWall = baseline.slice(0, MAX_WALL_CARDS);
+          const initialQueue = pendingFromInitial.sort(compareIdeasFIFO);
+
+          stateRef.current.wall = initialWall;
+          stateRef.current.queue = initialQueue;
+          setWall(initialWall);
+          setQueue(initialQueue);
+        } else {
+          // NULL_MARKER previo: todas las iniciales son posteriores al punto cero
+          stateRef.current.wall = [];
+          const sortedInitial = initial.slice().sort(compareIdeasFIFO);
+          stateRef.current.queue = sortedInitial;
+          setWall([]);
+          setQueue(sortedInitial);
+        }
+
+        // Reconcile inmediato tras recarga
+        requestReconcileRef.current();
+        if (stateRef.current.queue.length > 0) {
+          void promoteNext();
+        }
       }
+    } else if (previousContextKeyRef.current !== currentContextKey) {
+      // 2. Transición real de contexto (A -> B, B -> A, o cambio de publicCode)
+      previousContextKeyRef.current = currentContextKey;
+      activityGenerationRef.current += 1;
+
+      // Invalida cerraduras y cancela temporizadores del contexto anterior
+      promotingOwnerGenRef.current = null;
+      reconcileOwnerGenRef.current = null;
+      reconcilePendingGenRef.current = null;
+      clearPresentationTimer();
+      clearRetryTimer();
+      verificationAttemptsRef.current.clear();
+      catchUpFailuresRef.current = 0;
+
+      // Limpia completamente el estado visual y la cola para no mezclar contextos
+      stateRef.current = {
+        wall: [],
+        queue: [],
+        featured: null,
+      };
+      setWall([]);
+      setQueue([]);
+      setFeatured(null);
+
+      // Inicializa cursor para el nuevo publicCode
+      const stored = readStoredCursor(sessionStorage, publicCode);
+      if (stored.exists) {
+        cursorRef.current = stored.cursor;
+        watermarkRef.current = stored.cursor;
+      } else {
+        const zeroCursor: Cursor = {
+          createdAt: new Date().toISOString(),
+          id: "",
+        };
+        cursorRef.current = zeroCursor;
+        watermarkRef.current = zeroCursor;
+        persistCursor(sessionStorage, publicCode, zeroCursor);
+      }
+
+      // Reconciliación inmediata de la nueva actividad
+      requestReconcileRef.current();
     } else {
-      // Recarga de pestaña (H-03): ideas posteriores al cursor son elegibles para presentación
-      cursorRef.current = stored.cursor;
-      watermarkRef.current = stored.cursor;
-
-      if (stored.cursor) {
-        const baseline = initialIdeas.filter(
-          (i) => !isAfterCursor(i, stored.cursor),
-        );
-        const pendingFromInitial = initialIdeas.filter((i) =>
-          isAfterCursor(i, stored.cursor),
-        );
-
-        const initialWall = baseline.slice(0, MAX_WALL_CARDS);
-        const initialQueue = pendingFromInitial.sort(compareIdeasFIFO);
-
-        stateRef.current.wall = initialWall;
-        stateRef.current.queue = initialQueue;
-        setWall(initialWall);
-        setQueue(initialQueue);
-      } else {
-        // NULL_MARKER previo: todas las iniciales son posteriores al punto cero
-        stateRef.current.wall = [];
-        stateRef.current.queue = initialIdeas.slice().sort(compareIdeasFIFO);
-        setWall([]);
-        setQueue(initialIdeas.slice().sort(compareIdeasFIFO));
-      }
-
-      // Reconcile inmediato tras recarga
-      requestReconcile();
-      if (stateRef.current.queue.length > 0) {
+      // Re-ejecución con la misma clave: recuperar reconciliación o promoción.
+      if (
+        stateRef.current.queue.length > 0 &&
+        stateRef.current.featured === null
+      ) {
         void promoteNext();
+      } else if (stateRef.current.queue.length === 0) {
+        requestReconcileRef.current();
       }
     }
-  }, [publicCode, initialIdeas, requestReconcile, promoteNext]);
 
-  // Suscripción Realtime, resync al SUBSCRIBED y resync periódico (60s)
+    return () => {
+      // Cleanup al desmontar o antes de cambiar al siguiente contexto
+      activityGenerationRef.current += 1;
+      promotingOwnerGenRef.current = null;
+      reconcileOwnerGenRef.current = null;
+      reconcilePendingGenRef.current = null;
+      clearPresentationTimer();
+      clearRetryTimer();
+      verificationAttemptsRef.current.clear();
+      catchUpFailuresRef.current = 0;
+    };
+  }, [
+    activityId,
+    publicCode,
+    clearPresentationTimer,
+    clearRetryTimer,
+    promoteNext,
+  ]);
+
+  // Suscripción Realtime, resync al SUBSCRIBED y resync periódico (10s)
   useEffect(() => {
     const supabase = createClient();
+    const currentActivityId = activityId;
     const channel = supabase
       .channel(`ideas:${activityId}`)
       .on(
@@ -643,14 +1050,26 @@ export function LiveWall({
           event: "*",
           schema: "public",
           table: "ideas",
-          filter: `activity_id=eq.${activityId}`,
         },
         (payload) => {
+          // Filtrar eventos si la actividad activa ya no coincide con el canal
+          if (activityIdRef.current !== currentActivityId) {
+            return;
+          }
+
           if (payload.eventType === "DELETE") {
+            if (payload.old.activity_id !== currentActivityId) {
+              return;
+            }
             handleRemoveIdea(payload.old.id);
             return;
           }
           const idea = payload.new as Idea;
+          // Validar que la idea pertenezca a la actividad activa
+          if (idea.activity_id !== currentActivityId) {
+            return;
+          }
+
           if (idea.status === "published") {
             handleNewIdea(idea);
           } else {
@@ -660,26 +1079,36 @@ export function LiveWall({
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          requestReconcile();
+          if (activityIdRef.current === currentActivityId) {
+            requestReconcile();
+          }
         }
       });
 
     const resyncInterval = setInterval(() => {
-      requestReconcile();
+      if (activityIdRef.current === currentActivityId) {
+        requestReconcile();
+      }
     }, RESYNC_INTERVAL_MS);
 
     return () => {
       clearInterval(resyncInterval);
-      clearPresentationTimer();
       void supabase.removeChannel(channel);
     };
-  }, [
-    activityId,
-    clearPresentationTimer,
-    handleNewIdea,
-    handleRemoveIdea,
-    requestReconcile,
-  ]);
+  }, [activityId, handleNewIdea, handleRemoveIdea, requestReconcile]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestReconcileRef.current();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   const gridGeometry = getGridConfig(
     wall.length,
@@ -778,7 +1207,9 @@ export function LiveWall({
             >
               {wall.map((idea) => {
                 const isWide = wideSet.has(idea.id);
-                const actualCardWidth = isWide ? cellWidth * 2 + gap : cellWidth;
+                const actualCardWidth = isWide
+                  ? cellWidth * 2 + gap
+                  : cellWidth;
                 const cardTypo = calculateCardTypography(
                   idea.content,
                   actualCardWidth,

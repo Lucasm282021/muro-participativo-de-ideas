@@ -1,9 +1,9 @@
 # Estado actual del producto — Muro Participativo de Ideas ("muro común")
 
-**Fecha:** 08/10/2026
+**Fecha:** 08/10/2026 · **Última actualización:** 16/10/2026 (cierre de D4/T7 — mensaje de éxito según estado real)
 **Propósito:** fuente de verdad única sobre qué producto estamos construyendo, qué decisiones están aprobadas, qué está implementado, qué está validado y qué falta.
 **Alcance de este documento:** producto + arquitectura. No es un inventario de archivos ni un plan de refactor.
-**Fuentes:** implementación actual del repositorio (incluido el working tree sin commitear), `docs/evaluacion-cola-de-presentacion.md`, `docs/arquitectura.md`, `docs/modelo-de-datos.md`, `docs/despliegue.md`, README, migraciones de Supabase, y la evidencia de validación disponible.
+**Fuentes:** implementación actual del repositorio (incluidos los commits de `feat/pagina-administracion`), `docs/evaluacion-cola-de-presentacion.md`, `docs/arquitectura.md`, `docs/modelo-de-datos.md`, `docs/despliegue.md`, README, migraciones de Supabase, y la evidencia de validación disponible.
 **Lo que este documento NO hace:** no cambia código, no modifica arquitectura, no crea decisiones nuevas, no corrige discrepancias (sólo las registra).
 
 ---
@@ -76,7 +76,7 @@ Verificadas contra la implementación actual:
 | 6 | **CAP = 100 por batch, sin descartar ideas de la cola** | ✅ implementada | `BATCH_CAP` sólo limita cada query; `enqueueIdeas` no tope ni descarta (`src/lib/presentation.ts:115-140`) |
 | 7 | **Primera apertura sin catch-up histórico** (las ideas ya existentes sólo pueblan el muro; sólo se presentan las posteriores) | ✅ implementada | `src/components/live-wall.tsx:443-459` |
 | 8 | **Cursor `{createdAt, id}`** con avance monótono | ✅ implementada | tipo `Cursor`, `maxCursor`, `src/lib/presentation.ts:17,88` |
-| 9 | **Resync** (delta refetch al reconectar y periódico) | ✅ parcialmente implementada | `SUBSCRIBED → requestReconcile()` + intervalo de 60 s (`live-wall.tsx:522-530`); ver discrepancias D2 y §6 |
+| 9 | **Resync** (delta refetch al reconectar y periódico) | ✅ parcialmente implementada | `SUBSCRIBED → requestReconcile()` + intervalo de 10 s (`live-wall.tsx`); ver discrepancias D2 y §6 |
 | 10 | **`sessionStorage`** para el cursor por actividad | ✅ implementada | clave `muro_cursor2_<CÓDIGO>`, `src/lib/presentation.ts:237` |
 | 11 | **Identidad visual por `idea.id`** (no por índice) | ✅ implementada | `getCardVariant` (hash del id módulo 5), `src/lib/presentation.ts:32` |
 | 12 | **Moderación durante cola / featured / wall** (retiro al detectar, con interrupción de la destacada) | ✅ implementada | verificación antes de promover (`live-wall.tsx:170-199`), `purgeModeratedIdeas`, `removeIdea` y handler Realtime (`live-wall.tsx:420-521`) |
@@ -125,7 +125,7 @@ Categorías usadas (definiciones estrictas):
 - **Implementado:** código completo y consistente con la decisión aprobada.
 - **Parcialmente implementado:** existe pero cubre sólo parte de lo aprobado.
 - **Validado técnicamente:** verificado por herramientas (typecheck, linter, build, mediciones HTTP/DB de sólo lectura, lectura de código). **No implica validación funcional del producto.**
-- **Validado manualmente:** ejecutado en navegador/dispositivo por una persona verificando el comportamiento esperado. **Ningún aspecto del modelo de presentación tiene esta marca hoy.**
+- **Validado manualmente:** ejecutado en navegador/dispositivo por una persona verificando el comportamiento esperado. Hay validación parcial local registrada en §8.2; FIFO, recuperación de red y otras condiciones siguen pendientes.
 - **Pendiente de validación:** implementado (o parcial) pero sin evidencia manual.
 - **Fuera de alcance del MVP:** decidido como no objetivo del MVP.
 
@@ -137,8 +137,8 @@ Categorías usadas (definiciones estrictas):
 | FIFO `(created_at, id)`, N=48, hold 8 s, transición 700 ms, CAP 100 sin descartes | Implementado / pendiente de validación manual | constantes y funciones de `src/lib/presentation.ts` |
 | Primera apertura sin catch-up histórico; cursor `{createdAt,id}` en `sessionStorage` con `NULL_MARKER` | Implementado / pendiente de validación manual | `live-wall.tsx:439-494`, `presentation.ts:234-280` |
 | Identidad visual estable por `idea.id` (5 variantes por hash) | Implementado / pendiente de validación manual | `presentation.ts:32` |
-| Resync al `SUBSCRIBED` + resync periódico 60 s, con single-flight y pending-rerun | Implementado (parcial según D2) / validado técnicamente sólo | `live-wall.tsx:258-393, 496-543` |
-| Moderación durante cola/featured/wall: verificación antes de promover, purga acotada a IDs consultadas, interrupción de la destacada, retiro por evento Realtime | Implementado / pendiente de validación manual | `live-wall.tsx:170-199, 323-333, 420-436`, `presentation.ts:186-232` |
+| Resync al `SUBSCRIBED` + resync periódico 10 s, con single-flight y pending-rerun | Implementado (parcial según D2) / validado manualmente en local para inserción y republicación | `live-wall.tsx:258-393, 496-543` |
+| Moderación durante cola/featured/wall: verificación antes de promover, purga acotada a IDs consultadas, interrupción de la destacada, retiro por evento Realtime | Implementado / validación manual parcial; falta cubrir cola y destacado en todos los estados | `live-wall.tsx:170-199, 323-333, 420-436`, `presentation.ts:186-232` |
 | Query inicial con `.limit(48)` | Implementado / validado técnicamente (lectura de código + build) | `src/app/muro/[code]/page.tsx:22-26` |
 | UX de envío: `Enviando…` + spinner, botón bloqueado (`disabled` + `aria-busy`), confirmación real del servidor, mensaje de espera en cola, limpieza del textarea, preservación de identidad, conservación del contenido ante error, focus + scroll al mensaje | Implementado / pendiente de validación manual en dispositivo | `src/components/idea-form.tsx`, estilos nuevos en `src/app/globals.css` |
 | QR y enlace de participación derivados del origen efectivo (`getBaseUrl()` por headers + `window.location.origin` en cliente) | Implementado / pendiente de validación manual con celular | `src/lib/site-url.ts`, `share-qr-panel.tsx`, `live-wall.tsx:440` |
@@ -147,8 +147,7 @@ Categorías usadas (definiciones estrictas):
 
 | Aspecto | Qué falta | Referencia |
 | --- | --- | --- |
-| Resync (decisión 9) | Falta refetch **al recuperar la visibilidad de la pestaña** (foco), previsto en la evaluación §3.4/A5. Hoy: sólo `SUBSCRIBED` + cada 60 s. | Discrepancia D2 |
-| Mensaje de éxito de envío | La UI ignora el texto diferenciado del servidor (publicada vs pendiente de aprobación) y muestra siempre "Está esperando su turno". | **Problema funcional pendiente** — Discrepancia D4 |
+| Resync (decisión 9) | Falta refetch **al recuperar la visibilidad de la pestaña** (foco), previsto en la evaluación §3.4/A5. Hoy: sólo `SUBSCRIBED` + cada 10 s. | Discrepancia D2 |
 | Modelado del QR/LAN | La corrección aprobada (abrir panel vía `http://192.168.1.12:3000`) depende de que el organizador acceda desde esa URL; no hay una validación en dispositivo. | Discrepancia D8 |
 
 ### 5.3 Pendiente de validación (implementado, sin evidencia manual)
@@ -157,13 +156,13 @@ Ciclo completo de presentación en navegador · FIFO con ideas simultáneas · p
 
 ### 5.4 Fuera de alcance del MVP
 
-Roles de administrador global · votos · analítica de moderación · retención automática de datos · PWA (manifiesto/service worker) · múltiples pantallas sincronizadas (cursor compartido) · límite de ideas por participante / rate limit (A8) · paginación del panel sobre >1000 filas · virtualización de la grilla · CI/CD.
+Roles de administrador global · votos · analítica de moderación · retención automática de datos · PWA (manifiesto/service worker) · múltiples pantallas sincronizadas (cursor compartido) · configuración de un límite de envío distinto del tope técnico vigente de 5 ideas por participante y actividad en 60 s · paginación del panel sobre >1000 filas · virtualización de la grilla · CI/CD.
 
 ---
 
 ## 6. Robustez — correcciones P0 ya implementadas
 
-Correcciones de robustez presentes en la implementación actual del muro (working tree, aún sin commitear). Se documentan por su **comportamiento**; los identificadores (`I*`, `CA-*`, `H-*`, "Sección *") provienen de la especificación funcional de la cola (ver discrepancia D3: ese documento no está en el repo).
+Correcciones de robustez presentes en la implementación actual del muro, registradas en los commits de `feat/pagina-administracion`. Se documentan por su **comportamiento**; los identificadores (`I*`, `CA-*`, `H-*`, "Sección *") provienen de la especificación funcional de la cola (ver discrepancia D3: ese documento no está en el repo).
 
 | Corrección | Comportamiento implementado | Referencia |
 | --- | --- | --- |
@@ -175,7 +174,7 @@ Correcciones de robustez presentes en la implementación actual del muro (workin
 | **Reconciliación** | Descubrición lexicográfica (`created_at, id`) con `limit(100)` + moderación acotada a las IDs de wall+featured (≤49), en paralelo; fusión por ID sin pisar la cola pendiente. | `live-wall.tsx:258-370` |
 | **Single-flight** (`I9`) | Una sola reconciliación a la vez; si llega un pedido mientras corre, queda `pendingRerun` y se re-ejecuta al finalizar. | `live-wall.tsx:372-393` |
 | **Moderación** | Doble protección: (a) verificación puntual del estado de la cabeza antes de promover (retira y sigue); (b) purga por reconciliación de wall+featured con interrupción de la destacada. Borrado (DELETE) se retira al instante vía evento. | `live-wall.tsx:170-199, 323-333, 420-436` |
-| **Reconnect / resync** | La suscripción reconecta sola (librería); al confirmar `SUBSCRIBED` se reconcilia; además reconciliación periódica cada 60 s; en estado IDLE la cola re-consulta antes de promover (catch-up de discovery). | `live-wall.tsx:82-159, 496-543` |
+| **Reconnect / resync** | La suscripción reconecta sola (librería); al confirmar `SUBSCRIBED` se reconcilia; además reconciliación periódica cada 10 s; en estado IDLE la cola re-consulta antes de promover (catch-up de discovery). | `live-wall.tsx:82-159, 496-543` |
 
 ---
 
@@ -188,18 +187,17 @@ Comportamiento aprobado y su estado actual en `src/components/idea-form.tsx`:
 | **Enviando + spinner** | ✅ implementado | Botón muestra `<span class="button-spinner"/> Enviando…` durante `pending` |
 | **Botón bloqueado** | ✅ implementado | `disabled={pending}` + `aria-busy` + prevención de reenvío en `onSubmit` + anuncio `aria-live` "Enviando tu idea…" |
 | **Confirmación real del servidor** | ✅ implementado | El mensaje de éxito sólo se muestra si la Server Action devolvió `success` (no hay confirmación optimista) |
-| **Mensaje de espera en cola** | ⚠️ implementado con problema | Se muestra "¡Idea enviada! Está esperando su turno para aparecer en el muro." — **pero siempre**, ver D4 |
+| **Mensaje de éxito según estado real** | ✅ implementado (2026-10-16) | El bloque de éxito muestra textualmente el `state.success` devuelto por el servidor: "¡Tu idea ya está en el muro!" (publicada) o "¡Gracias! Tu idea quedó pendiente de aprobación." (pendiente); se eliminó la inferencia por subcadena (D4/T7) |
 | **Limpieza del textarea** | ✅ implementado | Al pasar de `pending` a terminado **con** `success`: `setContent("")` |
 | **Preservación de identidad** | ✅ implementado | Nombre/apellido/email viven en estado controlado que no se resetea; además se persisten en `localStorage` por actividad para no volver a completarlos |
 | **Conservación del contenido ante error** | ✅ implementado | El textarea es controlado: el contenido **no** se borra si el servidor devuelve `error`; además se hace focus y scroll al mensaje de error |
 
-Mensajería actual:
+Mensajería actual (tras cierre de D4, 2026-10-16):
 
-- **Éxito (mostrado):** "¡Idea enviada! Está esperando su turno para aparecer en el muro."
+- **Éxito (mostrado):** título "¡Idea enviada!" + el texto literal devuelto por el servidor: "¡Tu idea ya está en el muro!" (idea publicada, modo `automatic`) o "¡Gracias! Tu idea quedó pendiente de aprobación." (modo `approval`).
 - **Error (mostrado):** título "No pudimos enviar tu idea" + el texto devuelto por el servidor.
-- **Éxito (devuelto por el servidor, NO mostrado):** "¡Tu idea ya está en el muro!" (modo `automatic`) o "¡Gracias! Tu idea quedó pendiente de aprobación." (modo `approval`).
 
-> ⚠️ **Problema funcional pendiente (D4):** el servidor **distingue** entre idea publicada y pendiente de aprobación, pero la UI muestra **siempre** "Está esperando su turno para aparecer en el muro". En modo `automatic` el mensaje es incorrecto (la idea ya está en el muro) y en modo `approval` es ambiguo. **Documentado, no corregido.** Ver §5 y §9.
+> ✅ **Problema funcional D4 cerrado (2026-10-16, tarea T7):** `idea-form.tsx` dejó de reconstruir el mensaje por subcadena (`includes("aprobaci")`) y ahora muestra el mensaje del servidor tal cual. Validado en local en ambos modos: mensajes exactos y estados reales `published`/`pending` coincidentes entre panel y SQL (ver §8.2). Limitación: Chrome headless local; sin pruebas en otros navegadores ni dispositivos móviles.
 
 ---
 
@@ -224,14 +222,31 @@ Realizada el 08/10/2026 salvo donde se indica:
 
 ### 8.2 Validado manualmente
 
-**Ningún aspecto del modelo de presentación, del envío de ideas ni del QR tiene validación manual registrada.** No se ejecutó ninguna prueba funcional en navegador/dispositivo durante esta fase ni queda evidencia de una ejecución previa en el repositorio.
+**Validación parcial local (2026-10-16).** La app se ejecutó contra Supabase local (`127.0.0.1:25435`) con cuentas y actividades ficticias, eliminadas al finalizar:
+
+- Registro e inicio de sesión de organizadores; el acceso anónimo a `/panel` redirige a `/ingresar`.
+- Aislamiento básico: la cuenta B no ve la actividad de A y el acceso directo al detalle de A devuelve 404. No se intentó una acción mutante como B.
+- Moderación: una idea `pending` no aparece inicialmente en el muro; al aprobarla se presenta, al ocultarla sale del muro y al republicarla vuelve como destacada.
+- Realtime: inserción y republicación se reflejan en el muro sin recargar. Se detectó que el filtro servidor por `activity_id` no entregaba eventos en el stack local; la suscripción quedó sin ese filtro y conserva la comprobación estricta de actividad en cliente. La actualización se observó en menos de 2 s.
+- RPC `submit_idea`: resultado `accepted`, deduplicación `duplicate`, cinco aceptaciones por participante y actividad en 60 s, y `rate_limited` en la siguiente idea distinta.
+
+Esta ejecución no valida FIFO bajo concurrencia, reconexión de red, volumen de más de 48 ideas, flujo visual completo del formulario, QR en celular, serialización HTML/RSC ni la matriz completa de permisos RLS.
+
+**Validación T7/D4 (2026-10-16, posterior).** Contra el mismo Supabase local, en Chrome headless, se crearon dos actividades sintéticas (modos `automatic` y `approval`) y se envió una idea en cada una desde contexto anónimo:
+
+- Modo `automatic`: el bloque de éxito mostró exactamente "¡Tu idea ya está en el muro!"; la idea quedó `status = published`, visible en el panel bajo "En el muro".
+- Modo `approval`: mostró exactamente "¡Gracias! Tu idea quedó pendiente de aprobación."; la idea quedó `status = pending`, bajo "Por revisar" con botones de moderación.
+- Coincidencia mensaje ↔ estado real verificada en el panel y por SQL de solo lectura; no apareció el texto erróneo "Está esperando su turno…".
+- Evidencias (capturas de pantalla y JSON de pasos) en el directorio temporal fuera del repositorio: `C:\Users\lucas\AppData\Local\Temp\opencode\t7val\`. No se copiaron al repo.
+- Datos sintéticos conservados (cuenta `org-t7val-…@synthetic.local`, actividades `PRUEBA-T7-AUTO-…` y `PRUEBA-T7-APPROVAL-…` con sus ideas). Sin cambios en producción ni sobre datos preexistentes.
+- Limitaciones: Chrome headless local; sin pruebas en otros navegadores ni en dispositivo móvil. Cierra D4/T7; no valida A1 completa.
 
 ### 8.3 Pendiente de validación (lista de trabajo)
 
 1. Ciclo completo: idea nueva → cola → featured (8 s) → transición (700 ms) → muro.
 2. FIFO con ideas "simultáneas" (dos envíos casi juntos: orden predecible).
 3. Límite visual: muro con >48 ideas publicadas → sólo 48 tarjetas, sin scroll creciente.
-4. Moderación: ocultar desde el panel con idea en cola / destacada / muro → desaparición en ≤1 ciclo (60 s) y retiro de la destacada.
+4. Moderación: ocultar desde el panel con idea en cola / destacada / muro → desaparición en ≤1 ciclo de resync (10 s) y retiro de la destacada.
 5. Reconexión: cortar la red 30 s con ideas nuevas → al reconectar, todas aparecen (resync).
 6. Recarga con `sessionStorage`: F5 durante una presentación → estado coherente (línea base en muro, posteriores al cursor en cola) y sin repetir lo ya presentado.
 7. Primera apertura: sin presentar el histórico, sólo poblar el muro.
@@ -239,7 +254,7 @@ Realizada el 08/10/2026 salvo donde se indica:
 9. UX de envío en dispositivo: spinner, bloqueo del botón, mensaje de éxito/error, limpieza del textarea, preservación de identidad, contenido ante error.
 10. Envíos dobles: presionar rápido / pre-hidratación → verificar que no se crean ideas duplicadas (ver D7).
 11. Volumen: actividad con >1000 ideas → la query inicial no trunca en silencio (límite de PostgREST).
-12. Refetch al recuperar foco: **no aplicable hasta implementarse** (D2).
+12. Refetch al recuperar foco: **implementado y validado localmente (2026-10-16, T8), aceptado con limitación** — `visibilitychange` dispara `requestReconcile()`; idea creada en pestaña oculta apareció al volver el foco sin recarga, sin duplicados. Limitaciones de trazabilidad temporal y verificación independiente de consola documentadas. Cierre formal pendiente (D2).
 
 ---
 
@@ -259,7 +274,7 @@ Lista concreta y verificable. Todos están **pendientes de validación manual** 
 | A8 | **Recuperación ante reconexión** | Tras perder red ≥30 s, al reconectar: ideas perdidas entran a la cola y se presentan; no hay duplicados ni pérdidas. | Implementado · pendiente de validar |
 | A9 | **Límite visual** | Con >48 ideas publicadas, el DOM muestra ≤48 tarjetas y la carga inicial no crece con el histórico. | Implementado · pendiente de validar con volumen |
 
-Criterio transversal: el mensaje de éxito debe reflejar el estado real de la idea (publicada vs pendiente de aprobación) — **no cumplido hoy** (D4).
+Criterio transversal: el mensaje de éxito debe reflejar el estado real de la idea (publicada vs pendiente de aprobación) — **cumplido desde el cierre de D4/T7 (2026-10-16)**; la validación completa de A1 sigue pendiente.
 
 ---
 
@@ -279,7 +294,7 @@ Criterio transversal: el mensaje de éxito debe reflejar el estado real de la id
 | UX de envío (spinner, bloqueo, confirmación real, contenido ante error) | ✅ Implementado |
 | Correcciones de robustez P0 (§6) | ✅ Implementado |
 | **Validación funcional manual del MVP** (§8.3, criterios A1-A9) | ⬜ **Pendiente — es la puerta de salida del P0** |
-| **D4: mensaje de éxito correcto según estado de la idea** | ⬜ Pendiente (problema funcional, §7) |
+| **D4: mensaje de éxito correcto según estado de la idea** | ✅ Cerrado 2026-10-16 (T7; corregido en `idea-form.tsx` y validado en ambos modos, §8.2) |
 
 ### P1 — necesario para robustez (antes de un evento real)
 
@@ -287,7 +302,6 @@ Criterio transversal: el mensaje de éxito debe reflejar el estado real de la id
 | --- | --- |
 | Refetch al recuperar la visibilidad de la pestaña (foco) | D2, evaluación A5 |
 | Indicador de estado de conexión (EN VIVO / reconectando) vía callback de `subscribe` | evaluación P1.2 |
-| Límite de ideas por participante / rate limit dentro de `submit_idea` (anti-spam: la cola amplifica el abuso) | D5, evaluación A8/P1.4 |
 | Manejo explícito de errores en actions con fallo silencioso (3 actions) | evaluación P1.5 |
 | Discrepancia D3: incorporar al repo la especificación de la cola o reetiquetar las referencias del código | trazabilidad |
 | Discrepancia D6: actualizar `docs/arquitectura.md` con el modelo de presentación | evaluación P3.4 |
@@ -303,32 +317,32 @@ Roles globales, votos, analítica, retención automática, PWA, librerías de an
 
 ### Deuda técnica (P3)
 
-Working tree sin commitear (13 modificados + 3 sin trackear) · sin CI (`biome check` + `tsc --noEmit` + `next build`) · checks de ownership en 3 actions (RLS ya lo garantiza) · `allowedDevOrigins` sin configurar para desarrollo con origen LAN (assets 403 con `Origin` cross-origin).
+Sin CI (`biome check` + `tsc --noEmit` + `next build`) · checks de ownership en 3 actions (RLS ya lo garantiza) · `allowedDevOrigins` sin configurar para desarrollo con origen LAN (assets 403 con `Origin` cross-origin).
 
 ---
 
 ## 11. Discrepancias encontradas (trazabilidad)
 
-Ninguna fue corregida; sólo registradas.
+Se corrigieron las discrepancias D5 y D7 en la implementación; D4 se cerró el 2026-10-16 (T7, validado en local); D1–D3, D6 y D8 siguen abiertas. D9 describe el estado histórico anterior a los commits.
 
 | # | Discrepancia | Realidad actual |
 | --- | --- | --- |
 | **D1** | `docs/evaluacion-cola-de-presentacion.md` declara en su encabezado **"Estado: Propuesta arquitectónica evaluable (no implementada)"**. | La propuesta está **parcialmente implementada** en el working tree (P0 completo + parte de P1: resync, single-flight, moderación por reconciliación). El encabezado está **desactualizado**. **No se modificó el archivo**; queda pendiente decidir si actualizarlo, archivarlo o reemplazarlo. |
-| **D2** | La decisión A5 de la evaluación prevé refetch "al (re)conectar **y periódico/en foco**". | Sólo hay refetch al `SUBSCRIBED` y cada 60 s. **No existe** `visibilitychange`/refetch al recuperar foco (`live-wall.tsx` sin esas referencias). |
+| **D2** | La decisión A5 de la evaluación prevé refetch "al (re)conectar **y periódico/en foco**". | **Corregido y validado localmente (2026-10-16, T8); aceptado con limitación documentada, cierre formal pendiente.** Existe listener de `visibilitychange` que dispara `requestReconcile()` al pasar a `visible` (`live-wall.tsx:1100-1111`). Prueba dinámica con dos pestañas (actividad `AUAQK4XB`): idea sintética creada mientras la pestaña estaba `hidden`; al restaurar visibilidad sin recarga manual apareció en ≤1 pasada, sin duplicados. Causalidad de `visibilitychange` razonablemente respaldada (no demostrada con logs independientes). Limitaciones: evidencias conservadas con nombres/sufijos distintos a los originalmente referenciados; secuencia temporal registrada en scratchpads sin trazabilidad ms absoluta del evento; «0 errores de consola» es anotación del ejecutor sin log exportado. |
 | **D3** | El código cita "Sección 8.2 / 10.1 / 11", invariantes `I4`, `I5`, `I7`, `I8`, `I9`, `CA-1`, `CA-11`, `H-03`. | Esas secciones e invariantes pertenecen al documento funcional *Modelo de presentación y cola de ideas*, **que no existe en el repo**. La trazabilidad del código queda rota. |
-| **D4** | **Problema funcional pendiente.** `submitIdeaAction` devuelve un mensaje diferenciado según `idea_status` ("¡Tu idea ya está en el muro!" vs "…pendiente de aprobación"), pero `idea-form.tsx:240-244` muestra **siempre** "Está esperando su turno para aparecer en el muro"; el texto del servidor sólo se usa como booleano. | En modo `automatic` se informa mal (la idea ya está publicada); en modo `approval` el mensaje es ambiguo. **Documentado, no corregido.** |
-| **D5** | La evaluación clasifica el límite de ideas por participante (A8/P1.4) como **previo a exponer el muro en un evento real**. | Sólo existen 2 migraciones; ninguna implementa límite ni rate limit en `submit_idea`. Sigue abierto. |
+| **D4** | `submitIdeaAction` devuelve un mensaje diferenciado según `idea_status` ("¡Tu idea ya está en el muro!" vs "…pendiente de aprobación"), pero la UI reconstruía el texto en el cliente por subcadena (`includes("aprobaci")`) y mostraba siempre "Está esperando su turno para aparecer en el muro". | **Corregido y validado (2026-10-16, T7).** `idea-form.tsx:241` muestra ahora el `state.success` del servidor textualmente. Validado en local (Chrome headless): modo `automatic` → "¡Tu idea ya está en el muro!" + estado `published`; modo `approval` → "¡Gracias! Tu idea quedó pendiente de aprobación." + estado `pending`; panel y SQL coinciden (§8.2). Limitación: sin pruebas en otros navegadores ni dispositivos móviles. |
+| **D5** | La evaluación clasifica el límite de ideas por participante (A8/P1.4) como **previo a exponer el muro en un evento real**. | Corregido: `submit_idea` limita a cinco aceptaciones por participante y actividad en 60 s; validado en Supabase local. Sigue pendiente evaluar si ese umbral es adecuado para un evento real. |
 | **D6** | `docs/arquitectura.md` describe el muro como "actualización en vivo" sin cola, featured, transición ni límite de 48. | El documento no refleja el modelo actual (era P3.4; sigue pendiente). |
-| **D7** | La RPC no tiene dedupe de contenido ni idempotencia; no hay límite de envíos. | Evidencia en DB: ideas idénticas repetidas ("Prueba 1" ×12 en 11 s; "Hola" ×4, dos con 153 ms de diferencia). Causa no determinada (prensado repetido sin feedback, envíos pre-hidratación, o ambos); requiere validación (§8.3.10). |
+| **D7** | La RPC no tenía dedupe de contenido ni límite de envíos. | Corregido: `submit_idea` normaliza y deduplica contenido y aplica el límite documentado en D5; ambas respuestas se verificaron en Supabase local. La idempotencia de reintentos de transporte sigue sin estar garantizada. |
 | **D8** | El QR/enlace depende del **origen del navegador** (`getBaseUrl()` por headers + `window.location.origin` en `share-qr-panel.tsx` y `live-wall.tsx:440`). | Coherente con la corrección aprobada (abrir el panel vía `http://192.168.1.12:3000`), pero **no probado con un celular real**; si el organizador abre el panel en `localhost`, el QR volverá a ser inalcanzable desde el teléfono. |
-| **D9** | La evaluación registra como P3.1 "working tree sucio". | Siguen **13 archivos modificados + 3 sin trackear** (incluye todo el modelo de presentación y la UX de envío) sin commitear. Nada de esto está en `main`. |
+| **D9** | La evaluación registra como P3.1 "working tree sucio". | Estado histórico: los cambios de esta rama se registraron en commits; este texto queda como antecedente y no describe el estado actual del working tree. |
 
 ### Contradicciones adicionales detectadas
 
 - **`initialJoinUrl` del muro es redundante:** el servidor calcula `initialJoinUrl` con `getBaseUrl()`, pero `live-wall.tsx:440` lo sobreescribe con `window.location.origin` al montar. El QR del muro termina usando el origen del navegador que lo muestra (coherente con D8, pero la prop del servidor sólo vive el primer render).
 - **La evaluación ubica el delta refetch en P1, mientras que el código ya lo incluye en P0** (más allá de lo planificado en el documento, salvo el caso de foco, D2). Es una diferencia de estado, no de decisión.
 - **`docs/despliegue.md` lista una comprobación manual de actividad de prueba** como paso de despliegue, pero no hay registro de su ejecución para el modelo de presentación.
-- **La validación "manual" no existe en ninguna fuente del repo** para el modelo nuevo: todo lo que se afirma proviene de inspección de código o de mediciones técnicas.
+- **La validación manual del modelo nuevo es parcial**, registrada en §8.2; los casos pendientes no deben considerarse aprobados.
 
 ---
 
