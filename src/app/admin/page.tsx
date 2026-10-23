@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { forbidden, redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
 import { AdminActivityRow } from "@/app/admin/components/admin-activity-row";
 import { AdminIdeaRow } from "@/app/admin/components/admin-idea-row";
@@ -30,9 +30,13 @@ export default async function AdminDashboardPage() {
 
   // 2. Verificación autoritativa fresca de rol admin_global en servidor
   const authResult = await checkAdminAuthorization(supabase);
-  const isAuthorizedAdmin = authResult.authorized;
 
-  // 3. Consultas condicionales en el servidor
+  // Denegación estricta de acceso: HTTP 403 si la autorización no es positiva
+  if (!authResult.authorized) {
+    forbidden();
+  }
+
+  // 3. Consultas en el servidor (alcanzables únicamente por administradores verificados)
   let activities: Activity[] = [];
   let ideas: Idea[] = [];
   let auditLogs: {
@@ -48,49 +52,46 @@ export default async function AdminDashboardPage() {
   let ideasError: { message: string; code?: string } | null = null;
   let auditLogsError: { message: string; code?: string } | null = null;
 
-  if (isAuthorizedAdmin) {
-    // Si el usuario está acreditado como admin_global, consultar el universo global
-    const { data: rawActivities, error: actErr } = await supabase
-      .from("activities")
-      .select(
-        "id, public_code, title, question, status, moderation_mode, created_at, opened_at, closed_at",
-      )
-      .order("created_at", { ascending: false });
+  const { data: rawActivities, error: actErr } = await supabase
+    .from("activities")
+    .select(
+      "id, public_code, title, question, status, moderation_mode, created_at, opened_at, closed_at",
+    )
+    .order("created_at", { ascending: false });
 
-    if (actErr) {
-      activitiesError = actErr;
-    } else {
-      activities = (rawActivities ?? []) as Activity[];
-    }
-
-    const { data: rawIdeas, error: idErr } = await supabase
-      .from("ideas")
-      .select("id, activity_id, content, status, created_at, published_at")
-      .order("created_at", { ascending: false })
-      .limit(30);
-
-    if (idErr) {
-      ideasError = idErr;
-    } else {
-      ideas = (rawIdeas ?? []) as Idea[];
-    }
-
-    const { data: rawAuditLogs, error: auditErr } = await supabase
-      .from("audit_logs")
-      .select(
-        "id, target_table, target_id, action, actor_id, payload, created_at",
-      )
-      .order("created_at", { ascending: false })
-      .limit(15);
-
-    if (auditErr) {
-      auditLogsError = auditErr;
-    } else {
-      auditLogs = (rawAuditLogs ?? []) as typeof auditLogs;
-    }
+  if (actErr) {
+    activitiesError = actErr;
+  } else {
+    activities = (rawActivities ?? []) as Activity[];
   }
 
-  // Métricas reales calculadas exclusivamente cuando el rol está verificado
+  const { data: rawIdeas, error: idErr } = await supabase
+    .from("ideas")
+    .select("id, activity_id, content, status, created_at, published_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  if (idErr) {
+    ideasError = idErr;
+  } else {
+    ideas = (rawIdeas ?? []) as Idea[];
+  }
+
+  const { data: rawAuditLogs, error: auditErr } = await supabase
+    .from("audit_logs")
+    .select(
+      "id, target_table, target_id, action, actor_id, payload, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(15);
+
+  if (auditErr) {
+    auditLogsError = auditErr;
+  } else {
+    auditLogs = (rawAuditLogs ?? []) as typeof auditLogs;
+  }
+
+  // Métricas reales calculadas
   const openActivitiesCount = activities.filter(
     (a) => a.status === "open",
   ).length;
@@ -112,13 +113,7 @@ export default async function AdminDashboardPage() {
               muro<span className="brand-light">común</span>
             </span>
           </Link>
-          {isAuthorizedAdmin ? (
-            <span className="admin-badge-role">Admin Global</span>
-          ) : (
-            <span className="admin-badge-preview">
-              Vista previa · Sin rol asignado
-            </span>
-          )}
+          <span className="admin-badge-role">Admin Global</span>
         </div>
 
         <div className="nav-actions">
@@ -147,88 +142,50 @@ export default async function AdminDashboardPage() {
           <span className="dashboard-mark">✳</span>
         </div>
 
-        {/* Panel informativo de estado de autorización */}
-        {!isAuthorizedAdmin ? (
-          <div className="admin-phase-notice">
-            <span className="admin-notice-icon" aria-hidden="true">
-              ℹ
-            </span>
-            <div className="admin-phase-notice-content">
-              <h4>
-                Estado de Autorización — Pendiente de Provisión en Base de Datos
-              </h4>
-              <p>
-                Tu sesión está identificada en Supabase Auth, pero la función
-                autorizadora en servidor indicó que la cuenta no cuenta con el
-                rol <code>admin_global</code> activo en{" "}
-                <code>public.user_roles</code> (o la migración DDL
-                correspondiente no ha sido aplicada aún). Las operaciones
-                globales y la lectura de registros ajenos permanecen bloqueadas
-                por políticas de seguridad RLS.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="admin-phase-notice"
-            style={{ borderLeftColor: "#315a3d" }}
+        {/* Panel informativo de sesión autorizada */}
+        <div
+          className="admin-phase-notice"
+          style={{ borderLeftColor: "#315a3d" }}
+        >
+          <span
+            className="admin-notice-icon"
+            style={{ color: "#315a3d" }}
+            aria-hidden="true"
           >
-            <span
-              className="admin-notice-icon"
-              style={{ color: "#315a3d" }}
-              aria-hidden="true"
-            >
-              ✓
-            </span>
-            <div className="admin-phase-notice-content">
-              <h4>Sesión Administrativa Autorizada</h4>
-              <p>
-                Rol <code>admin_global</code> verificado de forma fresca en el
-                servidor mediante <code>public.is_admin()</code>. Las acciones
-                operativas de moderación, cierre, reapertura y eliminación en
-                cascada están habilitadas con doble barrera de seguridad.
-              </p>
-            </div>
+            ✓
+          </span>
+          <div className="admin-phase-notice-content">
+            <h4>Sesión Administrativa Autorizada</h4>
+            <p>
+              Rol <code>admin_global</code> verificado de forma fresca en el
+              servidor mediante <code>public.is_admin()</code>. Las acciones
+              operativas de moderación, cierre, reapertura y eliminación en
+              cascada están habilitadas con doble barrera de seguridad.
+            </p>
           </div>
-        )}
+        </div>
 
         {/* Tarjetas de resumen de indicadores */}
         <div className="admin-metrics-grid">
           <div className="admin-metric-card">
             <div className="admin-metric-header">
               <span className="admin-metric-label">Actividades Globales</span>
-              {isAuthorizedAdmin ? (
-                <span className="status-pill status-open">Activo</span>
-              ) : (
-                <span className="admin-badge-blocked">Pendiente RLS</span>
-              )}
+              <span className="status-pill status-open">Activo</span>
             </div>
-            <div className="admin-metric-value">
-              {isAuthorizedAdmin ? activities.length : "Pendiente"}
-            </div>
+            <div className="admin-metric-value">{activities.length}</div>
             <span className="admin-metric-subtext">
-              {isAuthorizedAdmin
-                ? `${openActivitiesCount} en curso · ${closedActivitiesCount} cerradas`
-                : "Políticas RLS actuales aíslan por propietario (owner_id = auth.uid())."}
+              {openActivitiesCount} en curso · {closedActivitiesCount} cerradas
             </span>
           </div>
 
           <div className="admin-metric-card">
             <div className="admin-metric-header">
               <span className="admin-metric-label">Ideas del Sistema</span>
-              {isAuthorizedAdmin ? (
-                <span className="status-pill status-pending">Moderación</span>
-              ) : (
-                <span className="admin-badge-blocked">Pendiente RLS</span>
-              )}
+              <span className="status-pill status-pending">Moderación</span>
             </div>
-            <div className="admin-metric-value">
-              {isAuthorizedAdmin ? ideas.length : "Pendiente"}
-            </div>
+            <div className="admin-metric-value">{ideas.length}</div>
             <span className="admin-metric-subtext">
-              {isAuthorizedAdmin
-                ? `${pendingIdeasCount} pendientes de revisión editorial`
-                : "La auditoría entre actividades requiere autorización de rol en servidor."}
+              {pendingIdeasCount} pendientes de revisión editorial
             </span>
           </div>
 
@@ -241,12 +198,10 @@ export default async function AdminDashboardPage() {
               className="admin-metric-value"
               style={{ fontSize: "20px", marginTop: "10px" }}
             >
-              {isAuthorizedAdmin ? "admin_global" : "Sin rol global"}
+              admin_global
             </div>
             <span className="admin-metric-subtext">
-              {isAuthorizedAdmin
-                ? "Verificación fresca confirmada en PostgreSQL."
-                : "Sesión identificada · Autorización DDL pendiente en BD."}
+              Verificación fresca confirmada en PostgreSQL.
             </span>
           </div>
         </div>
@@ -263,9 +218,7 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
             <span className="activity-count">
-              {isAuthorizedAdmin
-                ? String(activities.length).padStart(2, "0")
-                : "—"}
+              {String(activities.length).padStart(2, "0")}
             </span>
           </div>
 
@@ -285,25 +238,6 @@ export default async function AdminDashboardPage() {
             </div>
           )}
 
-          {!isAuthorizedAdmin && !activitiesError && (
-            <div className="admin-rls-notice">
-              <span className="admin-notice-icon" aria-hidden="true">
-                🔒
-              </span>
-              <div>
-                <h4>Lectura global no disponible con el esquema actual</h4>
-                <p>
-                  Las políticas RLS vigentes en la base de datos limitan la
-                  lectura de actividades estrictamente al organizador
-                  propietario (<code>owner_id = auth.uid()</code>). Para evitar
-                  presentar datos parciales como si fuesen una supervisión
-                  global, la carga operativa de registros se activará tras
-                  autorizarse y aplicarse la migración DDL de Fase 2.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Tabla de Actividades */}
           <div className="admin-table-container">
             <table className="admin-table">
@@ -317,11 +251,11 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {isAuthorizedAdmin && activities.length > 0 ? (
+                {activities.length > 0 ? (
                   activities.map((activity) => (
                     <AdminActivityRow key={activity.id} activity={activity} />
                   ))
-                ) : isAuthorizedAdmin && activities.length === 0 ? (
+                ) : (
                   <tr>
                     <td
                       colSpan={5}
@@ -334,48 +268,6 @@ export default async function AdminDashboardPage() {
                       No se encontraron actividades en la base de datos.
                     </td>
                   </tr>
-                ) : (
-                  <tr>
-                    <td>
-                      <div className="admin-table-title">
-                        Actividad de muestra (Estructura visual)
-                      </div>
-                      <div className="admin-table-desc">
-                        Visualización esquemática de la disposición de columnas
-                        para Fase 2.
-                      </div>
-                    </td>
-                    <td>
-                      <span className="status-pill status-open">En curso</span>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: "11px", color: "#61685e" }}>
-                        Publicación directa
-                      </span>
-                    </td>
-                    <td>
-                      <code
-                        style={{
-                          background: "#f0eee4",
-                          padding: "3px 6px",
-                          borderRadius: "3px",
-                          fontSize: "11px",
-                        }}
-                      >
-                        DEMO-01
-                      </code>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled
-                        aria-disabled="true"
-                        className="admin-action-disabled"
-                      >
-                        Gestionar (Próximamente)
-                      </button>
-                    </td>
-                  </tr>
                 )}
               </tbody>
             </table>
@@ -384,14 +276,8 @@ export default async function AdminDashboardPage() {
                 ✳ Gestión operativa de actividades · Eliminación protegida por
                 confirmación de código
               </span>
-              <span
-                className={
-                  isAuthorizedAdmin
-                    ? "status-pill status-open"
-                    : "admin-badge-soon"
-                }
-              >
-                {isAuthorizedAdmin ? "Acciones activas" : "Controles inactivos"}
+              <span className="status-pill status-open">
+                Acciones activas
               </span>
             </div>
           </div>
@@ -409,7 +295,7 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
             <span className="activity-count">
-              {isAuthorizedAdmin ? String(ideas.length).padStart(2, "0") : "—"}
+              {String(ideas.length).padStart(2, "0")}
             </span>
           </div>
 
@@ -428,25 +314,6 @@ export default async function AdminDashboardPage() {
             </div>
           )}
 
-          {!isAuthorizedAdmin && !ideasError && (
-            <div className="admin-rls-notice">
-              <span className="admin-notice-icon" aria-hidden="true">
-                🔒
-              </span>
-              <div>
-                <h4>Moderación centralizada restringida por RLS</h4>
-                <p>
-                  En el esquema actual, la lectura y moderación de ideas solo
-                  está permitida al organizador vinculado a la actividad. La
-                  auditoría central y las acciones administrativas de
-                  publicación u ocultamiento global se habilitarán en la Fase 2
-                  mediante Server Actions con validación estricta de{" "}
-                  <code>public.is_admin()</code>.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Tabla de Ideas */}
           <div className="admin-table-container">
             <table className="admin-table">
@@ -459,11 +326,11 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {isAuthorizedAdmin && ideas.length > 0 ? (
+                {ideas.length > 0 ? (
                   ideas.map((idea) => (
                     <AdminIdeaRow key={idea.id} idea={idea} />
                   ))
-                ) : isAuthorizedAdmin && ideas.length === 0 ? (
+                ) : (
                   <tr>
                     <td
                       colSpan={4}
@@ -476,37 +343,6 @@ export default async function AdminDashboardPage() {
                       No se encontraron ideas registradas.
                     </td>
                   </tr>
-                ) : (
-                  <tr>
-                    <td>
-                      <div
-                        style={{
-                          maxWidth: "460px",
-                          lineHeight: "1.5",
-                          color: "#555c53",
-                        }}
-                      >
-                        Contenido de muestra representativo de la tipografía y
-                        disposición visual del muro.
-                      </div>
-                    </td>
-                    <td>
-                      <span className="status-pill status-pending">
-                        Pendiente
-                      </span>
-                    </td>
-                    <td style={{ fontSize: "11px", color: "#8a8f86" }}>—</td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled
-                        aria-disabled="true"
-                        className="admin-action-disabled"
-                      >
-                        Moderar (Próximamente)
-                      </button>
-                    </td>
-                  </tr>
                 )}
               </tbody>
             </table>
@@ -515,14 +351,8 @@ export default async function AdminDashboardPage() {
                 ✳ Moderación editorial · Mutaciones atómicas con sincronización
                 de published_at
               </span>
-              <span
-                className={
-                  isAuthorizedAdmin
-                    ? "status-pill status-open"
-                    : "admin-badge-soon"
-                }
-              >
-                {isAuthorizedAdmin ? "Acciones activas" : "Controles inactivos"}
+              <span className="status-pill status-open">
+                Acciones activas
               </span>
             </div>
           </div>
@@ -540,9 +370,7 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
             <span className="activity-count">
-              {isAuthorizedAdmin
-                ? String(auditLogs.length).padStart(2, "0")
-                : "—"}
+              {String(auditLogs.length).padStart(2, "0")}
             </span>
           </div>
 
@@ -561,21 +389,6 @@ export default async function AdminDashboardPage() {
             </div>
           )}
 
-          {!isAuthorizedAdmin && !auditLogsError && (
-            <div className="admin-rls-notice">
-              <span className="admin-notice-icon" aria-hidden="true">
-                🔒
-              </span>
-              <div>
-                <h4>Acceso a bitácora restringido por RLS</h4>
-                <p>
-                  La lectura de <code>public.audit_logs</code> requiere
-                  autorización con el rol <code>admin_global</code> activo.
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="admin-table-container">
             <table className="admin-table">
               <thead>
@@ -588,7 +401,7 @@ export default async function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {isAuthorizedAdmin && auditLogs.length > 0 ? (
+                {auditLogs.length > 0 ? (
                   auditLogs.map((log) => {
                     const actorFormatted = log.actor_id
                       ? `admin-${log.actor_id.slice(0, 8)}`
@@ -698,7 +511,7 @@ export default async function AdminDashboardPage() {
                       </tr>
                     );
                   })
-                ) : isAuthorizedAdmin && auditLogs.length === 0 ? (
+                ) : (
                   <tr>
                     <td
                       colSpan={5}
@@ -711,21 +524,6 @@ export default async function AdminDashboardPage() {
                       No se registran eventos en la bitácora de auditoría.
                     </td>
                   </tr>
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      style={{
-                        textAlign: "center",
-                        padding: "20px",
-                        color: "#8a8f86",
-                        fontSize: "12px",
-                      }}
-                    >
-                      Visualización disponible para cuentas con rol
-                      administrativo acreditado.
-                    </td>
-                  </tr>
                 )}
               </tbody>
             </table>
@@ -734,14 +532,8 @@ export default async function AdminDashboardPage() {
                 📋 Bitácora histórica · No representa inmutabilidad
                 criptográfica · Trazabilidad de soporte
               </span>
-              <span
-                className={
-                  isAuthorizedAdmin
-                    ? "status-pill status-open"
-                    : "admin-badge-soon"
-                }
-              >
-                {isAuthorizedAdmin ? "Auditoría en vivo" : "Sin acceso"}
+              <span className="status-pill status-open">
+                Auditoría en vivo
               </span>
             </div>
           </div>
