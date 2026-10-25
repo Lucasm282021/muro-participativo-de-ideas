@@ -1,11 +1,20 @@
 import Link from "next/link";
+import { JoinCodeModal } from "@/components/join-code-modal";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    user = authUser ?? null;
+  } catch {
+    // Si la llamada de Auth falla o no hay conexión, se renderiza la vista pública de forma resiliente
+    user = null;
+  }
+
   return (
     <main className="landing-page">
       <nav className="site-nav">
@@ -18,6 +27,17 @@ export default async function Home() {
           </span>
         </Link>
         <div className="nav-actions">
+          <JoinCodeModal
+            triggerText="Tengo un código"
+            triggerClassName="nav-signin"
+            triggerStyle={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              font: "inherit",
+            }}
+          />
           {user ? (
             <Link className="button button-primary button-small" href="/panel">
               Ir a mi espacio <span>↗</span>
@@ -58,6 +78,10 @@ export default async function Home() {
             >
               Crear mi primera actividad <span>↗</span>
             </Link>
+            <JoinCodeModal
+              triggerText="Tengo un código ↗"
+              triggerClassName="button button-quiet"
+            />
             <a className="text-link" href="#como-funciona">
               Conocé cómo funciona <span>↓</span>
             </a>
