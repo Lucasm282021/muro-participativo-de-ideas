@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AboutModal } from "@/components/about-modal";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
 import { ActivityCard } from "@/components/activity-card";
@@ -31,6 +32,16 @@ export default async function OrganizerPanel() {
           </span>
         </Link>
         <div className="nav-actions">
+          <AboutModal
+            triggerClassName="nav-signin"
+            triggerText="Acerca de"
+            triggerStyle={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          />
           <span className="account-email">{user.email}</span>
           <form action={signOutAction}>
             <button type="submit" className="nav-signin">
