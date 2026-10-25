@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AboutModal } from "@/components/about-modal";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
@@ -163,6 +164,18 @@ export default async function Home() {
         </Link>
         <span>Un lugar para pensar en voz alta.</span>
         <span>Hecho para escucharnos mejor.</span>
+        <AboutModal
+          triggerText="Acerca de"
+          triggerStyle={{
+            textDecoration: "underline",
+            color: "inherit",
+            background: "none",
+            border: "none",
+            padding: 0,
+            font: "inherit",
+            cursor: "pointer",
+          }}
+        />
       </footer>
     </main>
   );
