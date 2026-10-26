@@ -2198,23 +2198,6 @@ textarea:focus-visible {
   flex: 0 0 auto;
 }
 @media (min-width: 1280px) and (min-height: 1000px) {
-  .dashboard-page {
-    display: flex;
-    height: 100vh;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .dashboard-nav {
-    flex: 0 0 auto;
-  }
-  .detail-main {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 16px 0 18px;
-  }
   .detail-heading {
     margin: 16px 0 14px;
   }
@@ -2223,38 +2206,8 @@ textarea:focus-visible {
     padding-bottom: 10px;
   }
   .detail-workspace {
-    min-height: 0;
-    flex: 1;
-    grid-template-rows: minmax(0, 1.32fr) minmax(0, 1fr);
-    gap: 20px;
-    overflow: hidden;
+    gap: 24px;
     margin-top: 16px;
-  }
-  .share-qr-panel,
-  .participants-section,
-  .moderation-section {
-    min-height: 0;
-    overflow: hidden;
-  }
-  .share-qr-panel,
-  .participants-section,
-  .moderation-section {
-    display: flex;
-    flex-direction: column;
-  }
-  .share-qr-panel .section-header {
-    flex: 0 0 auto;
-  }
-  .share-qr-box {
-    min-height: 0;
-    flex: 1;
-  }
-  .participants-list,
-  .moderation-list {
-    min-height: 0;
-    flex: 1;
-    overflow-y: auto;
-    overscroll-behavior: contain;
   }
 }
 @media (min-width: 1280px) and (max-height: 849px) {
