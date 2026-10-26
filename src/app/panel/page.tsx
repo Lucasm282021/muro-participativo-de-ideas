@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
+import { AboutModal } from "@/components/about-modal";
 import { ActivityCard } from "@/components/activity-card";
 import { ActivityForm } from "@/components/activity-form";
 import { createClient } from "@/lib/supabase/server";
@@ -31,6 +32,16 @@ export default async function OrganizerPanel() {
           </span>
         </Link>
         <div className="nav-actions">
+          <AboutModal
+            triggerClassName="nav-signin"
+            triggerText="Acerca de"
+            triggerStyle={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          />
           <span className="account-email">{user.email}</span>
           <form action={signOutAction}>
             <button type="submit" className="nav-signin">
@@ -50,17 +61,6 @@ export default async function OrganizerPanel() {
             </h1>
           </div>
           <span className="dashboard-mark">✳</span>
-        </div>
-        <div className="dashboard-create">
-          <div className="create-intro">
-            <span className="section-kicker">NUEVA ACTIVIDAD</span>
-            <h2>Abrí una conversación.</h2>
-            <p>
-              Contá qué querés conversar. El muro queda abierto para recibir
-              ideas.
-            </p>
-          </div>
-          <ActivityForm />
         </div>
         <section className="activity-list">
           <div className="section-header">
@@ -82,11 +82,43 @@ export default async function OrganizerPanel() {
             <div className="empty-activities">
               <span>✳</span>
               <p>
-                Todavía no hay actividades. La primera empieza con una pregunta.
+                Todavía no hay actividades. Abrí una conversación abajo para
+                empezar.
               </p>
             </div>
           )}
         </section>
+        <details
+          className="dashboard-create-accordion"
+          open={activities.length === 0}
+        >
+          <summary className="dashboard-create-summary">
+            <div className="dashboard-create-summary-left">
+              <span className="button button-primary create-toggle-button">
+                + Nueva actividad
+              </span>
+              <span className="create-summary-hint">
+                {activities.length === 0
+                  ? "Completá el formulario para comenzar"
+                  : "Abrí una nueva conversación y prepará el muro"}
+              </span>
+            </div>
+            <span className="create-accordion-indicator" aria-hidden="true">
+              ▾
+            </span>
+          </summary>
+          <div className="dashboard-create">
+            <div className="create-intro">
+              <span className="section-kicker">NUEVA ACTIVIDAD</span>
+              <h2>Abrí una conversación.</h2>
+              <p>
+                Contá qué querés conversar. El muro queda abierto para recibir
+                ideas.
+              </p>
+            </div>
+            <ActivityForm />
+          </div>
+        </details>
       </section>
     </main>
   );

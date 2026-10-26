@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
+import { ActivityStatusToggle } from "@/components/activity-status-toggle";
 import { DeleteActivityButton } from "@/components/delete-activity-button";
-import { IdeaModerationActions } from "@/components/idea-moderation-actions";
+import { IdeaModerationFilter } from "@/components/idea-moderation-filter";
 import { ModerationModeForm } from "@/components/moderation-mode-form";
 import { ShareQrPanel } from "@/components/share-qr-panel";
 import { getBaseUrl } from "@/lib/site-url";
@@ -66,9 +67,7 @@ export default async function ActivityDetailPage({
           </span>
         </Link>
         <div className="nav-actions">
-          <Link className="nav-signin" href="/panel">
-            ← Actividades
-          </Link>
+          <span className="account-email">{user.email}</span>
           <form action={signOutAction}>
             <button type="submit" className="nav-signin">
               Salir
@@ -78,10 +77,16 @@ export default async function ActivityDetailPage({
       </header>
       <section className="detail-main">
         <div className="detail-back">
-          <Link href="/panel">← Todas las conversaciones</Link>
-          <span className={`status-pill status-${activity.status}`}>
-            {activity.status === "open" ? "En curso" : "Cerrada"}
-          </span>
+          <Link href="/panel">← Actividades</Link>
+          <div className="detail-status-group">
+            <span className={`status-pill status-${activity.status}`}>
+              {activity.status === "open" ? "En curso" : "Cerrada"}
+            </span>
+            <ActivityStatusToggle
+              activityId={id}
+              isOpen={activity.status === "open"}
+            />
+          </div>
         </div>
         <div className="detail-heading">
           <div>
@@ -109,10 +114,6 @@ export default async function ActivityDetailPage({
             >
               Abrir muro ↗
             </Link>
-            <DeleteActivityButton
-              activityId={id}
-              activityTitle={activity.title}
-            />
           </div>
         </div>
         <div className="detail-workspace">
@@ -132,46 +133,11 @@ export default async function ActivityDetailPage({
               </div>
               <span className="pending-badge">{pendingCount} por revisar</span>
             </div>
-            {ideas.length ? (
-              <div className="moderation-list">
-                {ideas.map((idea) => (
-                  <article className="moderation-card" key={idea.id}>
-                    <div className="moderation-card-content">
-                      <span className={`idea-status status-${idea.status}`}>
-                        {idea.status === "pending"
-                          ? "Por revisar"
-                          : idea.status === "published"
-                            ? "En el muro"
-                            : "Oculta del muro"}
-                      </span>
-                      <p>{idea.content}</p>
-                      <time>
-                        {new Intl.DateTimeFormat("es-AR", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(idea.created_at))}
-                      </time>
-                    </div>
-                    <IdeaModerationActions
-                      activityId={id}
-                      ideaId={idea.id}
-                      ideaStatus={
-                        idea.status as "pending" | "published" | "hidden"
-                      }
-                      moderationMode={activity.moderation_mode}
-                    />
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-activities">
-                <span>✳</span>
-                <p>
-                  Todavía no hay ideas. Cuando alguien envíe una, vas a verla
-                  acá junto con su estado.
-                </p>
-              </div>
-            )}
+            <IdeaModerationFilter
+              ideas={ideas}
+              activityId={id}
+              moderationMode={activity.moderation_mode}
+            />
           </section>
           <section className="participants-section">
             <div className="section-header">
@@ -214,6 +180,25 @@ export default async function ActivityDetailPage({
             initialMode={activity.moderation_mode}
           />
         </div>
+        <section className="danger-zone" aria-labelledby="danger-zone-heading">
+          <div className="danger-zone-card">
+            <div className="danger-zone-info">
+              <span className="danger-zone-badge">ZONA DE PELIGRO</span>
+              <h2 id="danger-zone-heading">Eliminar esta actividad</h2>
+              <p>
+                Esta acción borrará de forma permanente todas las ideas
+                recibidas, registros de participantes y configuraciones
+                asociadas. No se puede deshacer.
+              </p>
+            </div>
+            <div className="danger-zone-action">
+              <DeleteActivityButton
+                activityId={id}
+                activityTitle={activity.title}
+              />
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   );
