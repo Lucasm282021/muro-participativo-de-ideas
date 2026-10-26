@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AboutModal } from "@/components/about-modal";
 import { JoinCodeModal } from "@/components/join-code-modal";
 import { createClient } from "@/lib/supabase/server";
 
@@ -151,7 +152,9 @@ export default async function Home() {
         </div>
         <div className="principle-grid">
           <article>
-            <span className="principle-icon icon-circle">01</span>
+            <div className="principle-icon-wrap">
+              <span className="principle-icon">01</span>
+            </div>
             <h3>Abrí la conversación</h3>
             <p>
               Planteá una pregunta que invite a imaginar y compartí el acceso
@@ -159,7 +162,9 @@ export default async function Home() {
             </p>
           </article>
           <article>
-            <span className="principle-icon icon-square">02</span>
+            <div className="principle-icon-wrap">
+              <span className="principle-icon">02</span>
+            </div>
             <h3>Dejá que aparezcan</h3>
             <p>
               Cada persona aporta desde su celular. Las ideas pueden publicarse
@@ -167,7 +172,9 @@ export default async function Home() {
             </p>
           </article>
           <article>
-            <span className="principle-icon icon-star">03</span>
+            <div className="principle-icon-wrap">
+              <span className="principle-icon">03</span>
+            </div>
             <h3>Miralas crecer</h3>
             <p>
               El muro se actualiza en vivo y mantiene cada idea visible, sin
@@ -187,6 +194,18 @@ export default async function Home() {
         </Link>
         <span>Un lugar para pensar en voz alta.</span>
         <span>Hecho para escucharnos mejor.</span>
+        <AboutModal
+          triggerText="Acerca de"
+          triggerStyle={{
+            textDecoration: "underline",
+            color: "inherit",
+            background: "none",
+            border: "none",
+            padding: 0,
+            font: "inherit",
+            cursor: "pointer",
+          }}
+        />
       </footer>
     </main>
   );
