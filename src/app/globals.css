@@ -3,7 +3,7 @@
 :root {
   --paper: #f6f4ef;
   --ink: #202620;
-  --muted: #70766f;
+  --muted: #545c53;
   --line: #deded5;
   --green: #b9f26f;
   --green-deep: #315c3b;
@@ -89,7 +89,7 @@ textarea:focus-visible {
 }
 .brand-light {
   font-weight: 400;
-  color: #81867e;
+  color: #5a6358;
 }
 .nav-actions {
   display: flex;
@@ -1732,6 +1732,9 @@ textarea:focus-visible {
   border-top: 1px solid #e8e7df;
   flex: 0 0 auto;
 }
+.join-code span {
+  font-size: 9px;
+}
 .wall-join-card .join-code span {
   font-size: 9px;
 }
@@ -2471,4 +2474,52 @@ textarea:focus-visible {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+.join-code-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(32, 38, 32, 0.45);
+  backdrop-filter: blur(4px);
+  animation: modal-fade-in 0.2s ease-out;
+}
+.join-code-modal-card {
+  position: relative;
+  width: min(100%, 460px);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 30px 26px 26px;
+  border: 1px solid #e4e2d8;
+  border-radius: 8px;
+  background: #fffefa;
+  box-shadow: 0 24px 64px rgba(40, 48, 30, 0.22);
+  animation: modal-pop-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.join-code-modal-close-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e0d6;
+  border-radius: 50%;
+  background: #fbfaf6;
+  color: #50574f;
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.join-code-modal-close-btn:hover {
+  background: #eeebe1;
+  color: #202620;
 }
