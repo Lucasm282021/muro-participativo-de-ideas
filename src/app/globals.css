@@ -1061,6 +1061,8 @@ textarea:focus-visible {
   font-size: 42px;
   letter-spacing: -2px;
   font-weight: 500;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 .detail-heading p {
   max-width: 610px;
@@ -1068,6 +1070,7 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
+  overflow-wrap: break-word;
 }
 .detail-actions {
   display: flex;
@@ -1080,17 +1083,19 @@ textarea:focus-visible {
 }
 .detail-workspace {
   display: grid;
-  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
-  grid-template-areas:
-    "share moderation"
-    "participants mode";
-  align-items: stretch;
-  gap: 30px;
+  grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);
+  align-items: start;
+  gap: 32px;
   margin-top: 28px;
+}
+.detail-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
 }
 .share-qr-panel {
   margin-top: 0;
-  grid-area: share;
 }
 .share-qr-box {
   display: grid;
@@ -1188,26 +1193,29 @@ textarea:focus-visible {
   font-weight: 600;
 }
 .mode-change-strip {
-  align-self: start;
-  grid-area: mode;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 14px;
   margin-top: 0;
-  padding: 14px 18px;
+  padding: 18px 20px;
   border: 1px solid #e1dfd5;
-  background: #f9f8f3;
+  background: #fffefa;
 }
-.mode-change-strip > div {
-  margin-right: auto;
-}
-.mode-change-strip p {
+.mode-change-intro p {
   margin: 5px 0 0;
   color: #4b5249;
   font-size: 12px;
+  line-height: 1.5;
 }
-.mode-change-strip select {
-  min-height: 36px;
+.mode-change-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mode-change-controls select {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
   padding: 0 10px;
   border: 1px solid #deded5;
   border-radius: 4px;
@@ -1215,9 +1223,14 @@ textarea:focus-visible {
   color: var(--ink);
   font-size: 12px;
 }
+.mode-change-controls .button {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 11px;
+}
 .participants-section {
   margin-top: 0;
-  grid-area: participants;
 }
 .participants-list {
   display: flex;
@@ -1248,20 +1261,29 @@ textarea:focus-visible {
   font-size: 11px;
   font-weight: 700;
 }
-.participant-row strong {
+.participant-row strong,
+.participant-name {
   color: #1f241e;
   font-size: 13px;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.participant-row > span:last-child {
+.participant-row > span:last-child,
+.participant-email {
   margin-left: auto;
   color: #4b5249;
   font-size: 12px;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .moderation-section {
   display: flex;
   flex-direction: column;
   margin-top: 0;
-  grid-area: moderation;
 }
 .moderation-section > .empty-activities {
   flex: 1;
@@ -2248,19 +2270,18 @@ textarea:focus-visible {
     letter-spacing: -1.5px;
   }
   .mode-change-strip {
-    padding: 8px 14px;
+    padding: 12px 14px;
   }
   .mode-change-strip p {
-    font-size: 9px;
+    font-size: 10px;
   }
   .share-qr-summary {
     gap: 16px;
     padding-top: 8px;
   }
   .detail-workspace {
-    grid-template-rows: minmax(0, 1.55fr) minmax(0, 0.7fr);
-    gap: 14px;
-    margin-top: 8px;
+    gap: 20px;
+    margin-top: 14px;
   }
   .share-qr-box {
     gap: 10px;
@@ -2369,31 +2390,31 @@ textarea:focus-visible {
     flex-wrap: wrap;
   }
   .detail-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "share"
-      "moderation"
-      "participants"
-      "mode";
-    gap: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .detail-sidebar {
+    display: contents;
+  }
+  .share-qr-panel {
+    order: 1;
+  }
+  .moderation-section {
+    order: 2;
+  }
+  .participants-section {
+    order: 3;
+  }
+  .mode-change-strip {
+    order: 4;
   }
   .wall-content {
     grid-template-columns: 1fr clamp(140px, 20vw, 190px);
     gap: 10px;
   }
 }
-@media (min-width: 901px) and (max-width: 1279px) {
-  .detail-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "share"
-      "moderation"
-      "participants"
-      "mode";
-    gap: 22px;
-    margin-top: 20px;
-  }
-}
+/* 2-column sidebar layout maintained on 901px-1279px */
 @media (max-width: 650px) {
   .site-nav,
   .dashboard-nav,
@@ -2629,38 +2650,44 @@ textarea:focus-visible {
   .detail-heading {
     align-items: flex-start;
     flex-direction: column;
-    margin: 24px 0 20px;
+    margin: 20px 0 16px;
+    gap: 16px;
   }
   .detail-heading h1 {
-    font-size: 33px;
+    font-size: 30px;
+    letter-spacing: -1.5px;
   }
   .detail-actions {
     width: 100%;
+    flex-direction: column;
+    gap: 10px;
   }
   .detail-actions .button {
-    flex: 1;
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
   }
   .mode-change-strip {
+    padding: 16px;
+  }
+  .mode-change-controls {
+    flex-direction: column;
     align-items: stretch;
-    flex-wrap: wrap;
+    gap: 8px;
   }
-  .mode-change-strip > div {
+  .mode-change-controls select,
+  .mode-change-controls .button {
     width: 100%;
-    margin-right: 0;
-  }
-  .mode-change-strip select {
-    min-width: 0;
-    flex: 1;
+    min-height: 42px;
   }
   .detail-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "share"
-      "moderation"
-      "participants"
-      "mode";
-    gap: 30px;
-    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 20px;
+  }
+  .detail-sidebar {
+    display: contents;
   }
   .share-qr-box {
     grid-template-columns: minmax(0, 1fr);
@@ -2688,10 +2715,18 @@ textarea:focus-visible {
   }
   .participant-row {
     flex-wrap: wrap;
+    gap: 4px 10px;
+    min-height: 48px;
   }
-  .participant-row > span:last-child {
-    width: calc(100% - 42px);
+  .participant-row strong,
+  .participant-name {
+    max-width: calc(100% - 46px);
+  }
+  .participant-row > span:last-child,
+  .participant-email {
+    width: 100%;
     margin-left: 42px;
+    max-width: calc(100% - 42px);
   }
   .moderation-section {
     margin-top: 0;
