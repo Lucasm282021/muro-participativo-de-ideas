@@ -1,7 +1,7 @@
 "use client";
 
 import { QRCodeCanvas } from "qrcode.react";
-import { useEffect, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { toggleActivityAction } from "@/app/actions";
 
 type ShareQrPanelProps = {
@@ -80,6 +80,11 @@ export function ShareQrPanel({
     }
     window.setTimeout(() => setStatus("Compartir enlace"), 1800);
   };
+
+  const [toggleState, toggleFormAction, isTogglePending] = useActionState(
+    toggleActivityAction,
+    {},
+  );
 
   return (
     <section
@@ -161,7 +166,7 @@ export function ShareQrPanel({
             <span>IDEAS</span>
             <strong>{ideaCount}</strong>
           </div>
-          <form action={toggleActivityAction}>
+          <form action={toggleFormAction}>
             <input type="hidden" name="activity_id" value={activityId} />
             <input
               type="hidden"
@@ -173,9 +178,35 @@ export function ShareQrPanel({
               className={
                 isOpen ? "button button-danger" : "button button-primary"
               }
+              disabled={isTogglePending}
+              aria-busy={isTogglePending}
             >
-              {isOpen ? "Dejar de recibir ideas" : "Volver a recibir ideas"}
+              {isTogglePending
+                ? isOpen
+                  ? "Cerrando recepción…"
+                  : "Abriendo recepción…"
+                : isOpen
+                  ? "Dejar de recibir ideas"
+                  : "Volver a recibir ideas"}
             </button>
+            {toggleState.error && (
+              <p
+                className="form-message error-message"
+                role="alert"
+                style={{ marginTop: "6px", fontSize: "11px" }}
+              >
+                {toggleState.error}
+              </p>
+            )}
+            {toggleState.success && (
+              <p
+                className="form-message success-message"
+                role="status"
+                style={{ marginTop: "6px", fontSize: "11px" }}
+              >
+                {toggleState.success}
+              </p>
+            )}
           </form>
         </div>
       </div>
