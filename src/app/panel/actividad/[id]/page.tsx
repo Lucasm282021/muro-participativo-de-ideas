@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions";
+import { AboutModal } from "@/components/about-modal";
 import { ActivityStatusToggle } from "@/components/activity-status-toggle";
 import { DeleteActivityButton } from "@/components/delete-activity-button";
 import { IdeaModerationFilter } from "@/components/idea-moderation-filter";
@@ -67,6 +68,16 @@ export default async function ActivityDetailPage({
           </span>
         </Link>
         <div className="nav-actions">
+          <AboutModal
+            triggerClassName="nav-signin"
+            triggerText="Acerca de"
+            triggerStyle={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          />
           <span className="account-email">{user.email}</span>
           <form action={signOutAction}>
             <button type="submit" className="nav-signin">
@@ -104,6 +115,8 @@ export default async function ActivityDetailPage({
               className="button button-quiet"
               href={`/a/${activity.public_code}`}
               target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Ver formulario de participante para ${activity.title} en nueva pestaña`}
             >
               Ver formulario ↗
             </Link>
@@ -111,25 +124,86 @@ export default async function ActivityDetailPage({
               className="button button-primary"
               href={`/muro/${activity.public_code}`}
               target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Abrir muro público de ${activity.title} en nueva pestaña`}
             >
               Abrir muro ↗
             </Link>
           </div>
         </div>
         <div className="detail-workspace">
-          <ShareQrPanel
-            joinUrl={joinUrl}
-            publicCode={activity.public_code}
-            activityId={id}
-            participantCount={participantCount ?? 0}
-            ideaCount={ideas.length}
-            isOpen={activity.status === "open"}
-          />
-          <section className="moderation-section">
+          <aside
+            className="detail-sidebar"
+            aria-label="Información y configuración de la actividad"
+          >
+            <ShareQrPanel
+              joinUrl={joinUrl}
+              publicCode={activity.public_code}
+              activityId={id}
+              participantCount={participantCount ?? 0}
+              ideaCount={ideas.length}
+              isOpen={activity.status === "open"}
+            />
+            <ModerationModeForm
+              activityId={id}
+              initialMode={activity.moderation_mode}
+            />
+            <section
+              className="participants-section"
+              aria-labelledby="participants-heading"
+            >
+              <div className="section-header">
+                <div>
+                  <span className="section-kicker">DATOS DE CONTACTO</span>
+                  <h2 id="participants-heading">Participantes</h2>
+                  <p className="detail-section-description">
+                    Solo vos ves sus nombres y correos; las ideas aparecen sin
+                    autor en el muro.
+                  </p>
+                </div>
+              </div>
+              {participants?.length ? (
+                <div className="participants-list">
+                  {participants.map((participant) => (
+                    <article
+                      className="participant-row"
+                      key={participant.email}
+                    >
+                      <span className="participant-avatar" aria-hidden="true">
+                        {participant.first_name.slice(0, 1)}
+                        {participant.last_name.slice(0, 1)}
+                      </span>
+                      <strong className="participant-name">
+                        {participant.first_name} {participant.last_name}
+                      </strong>
+                      <span
+                        className="participant-email"
+                        title={participant.email}
+                      >
+                        {participant.email}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-activities">
+                  <span aria-hidden="true">◌</span>
+                  <p>
+                    Todavía no hay participantes. Sus nombres y correos
+                    aparecerán acá cuando envíen una idea.
+                  </p>
+                </div>
+              )}
+            </section>
+          </aside>
+          <section
+            className="moderation-section"
+            aria-labelledby="moderation-section-heading"
+          >
             <div className="section-header">
               <div>
                 <span className="section-kicker">REVISIÓN DE IDEAS</span>
-                <h2>Ideas recibidas</h2>
+                <h2 id="moderation-section-heading">Ideas recibidas</h2>
               </div>
               <span className="pending-badge">{pendingCount} por revisar</span>
             </div>
@@ -139,46 +213,6 @@ export default async function ActivityDetailPage({
               moderationMode={activity.moderation_mode}
             />
           </section>
-          <section className="participants-section">
-            <div className="section-header">
-              <div>
-                <span className="section-kicker">DATOS DE CONTACTO</span>
-                <h2>Participantes</h2>
-                <p className="detail-section-description">
-                  Solo vos ves sus nombres y correos; las ideas aparecen sin
-                  autor en el muro.
-                </p>
-              </div>
-            </div>
-            {participants?.length ? (
-              <div className="participants-list">
-                {participants.map((participant) => (
-                  <article className="participant-row" key={participant.email}>
-                    <span className="participant-avatar">
-                      {participant.first_name.slice(0, 1)}
-                      {participant.last_name.slice(0, 1)}
-                    </span>
-                    <strong>
-                      {participant.first_name} {participant.last_name}
-                    </strong>
-                    <span>{participant.email}</span>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-activities">
-                <span>◌</span>
-                <p>
-                  Todavía no hay participantes. Sus nombres y correos aparecerán
-                  acá cuando envíen una idea.
-                </p>
-              </div>
-            )}
-          </section>
-          <ModerationModeForm
-            activityId={id}
-            initialMode={activity.moderation_mode}
-          />
         </div>
         <section className="danger-zone" aria-labelledby="danger-zone-heading">
           <div className="danger-zone-card">

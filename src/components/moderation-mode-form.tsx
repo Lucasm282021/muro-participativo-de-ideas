@@ -31,52 +31,42 @@ export function ModerationModeForm({
   }, [state.error, initialMode]);
 
   return (
-    <form
-      action={formAction}
-      className="mode-change-strip"
-      style={{ flexWrap: "wrap" }}
-    >
+    <form action={formAction} className="mode-change-strip">
       <input type="hidden" name="activity_id" value={activityId} />
-      <div>
+      <div className="mode-change-intro">
         <span className="section-kicker">PUBLICACIÓN DE IDEAS</span>
         <p>
           Elegí si las ideas nuevas se publican automáticamente o esperan tu
           aprobación. Las que ya están pendientes no cambian al guardar.
         </p>
       </div>
-      <select
-        name="moderation_mode"
-        value={mode}
-        onChange={(e) => setMode(e.target.value as "automatic" | "approval")}
-        disabled={pending}
-        aria-label="Modo de publicación"
-      >
-        <option value="automatic">Publicar automáticamente</option>
-        <option value="approval">Revisar antes de publicar</option>
-      </select>
-      <button
-        type="submit"
-        className="button button-quiet"
-        disabled={pending}
-        aria-busy={pending}
-      >
-        {pending ? "Guardando…" : "Guardar modo"}
-      </button>
-      {state.error && (
-        <p
-          className="form-message error-message"
-          role="alert"
-          style={{ width: "100%", margin: "8px 0 0" }}
+      <div className="mode-change-controls">
+        <select
+          name="moderation_mode"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "automatic" | "approval")}
+          disabled={pending}
+          aria-label="Modo de publicación"
         >
+          <option value="automatic">Publicar automáticamente</option>
+          <option value="approval">Revisar antes de publicar</option>
+        </select>
+        <button
+          type="submit"
+          className="button button-quiet"
+          disabled={pending}
+          aria-busy={pending}
+        >
+          {pending ? "Guardando…" : "Guardar modo"}
+        </button>
+      </div>
+      {state.error && (
+        <p className="form-message error-message" role="alert">
           {state.error}
         </p>
       )}
       {state.success && (
-        <p
-          className="form-message success-message"
-          role="status"
-          style={{ width: "100%", margin: "8px 0 0" }}
-        >
+        <p className="form-message success-message" role="status">
           {state.success}
         </p>
       )}
