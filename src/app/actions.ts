@@ -206,7 +206,6 @@ export async function createActivityAction(
   redirect(`/panel/actividad/${data.id}`);
 }
 
-
 export async function submitIdeaAction(
   publicCode: string,
   _previous: FormState,
@@ -247,7 +246,10 @@ const moderateIdeaSchema = z.object({
   }),
 });
 
-export async function moderateIdeaAction(formData: FormData) {
+export async function moderateIdeaAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const parsed = moderateIdeaSchema.safeParse({
     ideaId: formData.get("idea_id"),
     activityId: formData.get("activity_id"),
@@ -258,7 +260,11 @@ export async function moderateIdeaAction(formData: FormData) {
       "Error de validación en moderateIdeaAction:",
       parsed.error.issues,
     );
-    return;
+    return {
+      error:
+        parsed.error.issues[0]?.message ??
+        "Parámetros de moderación inválidos.",
+    };
   }
 
   const supabase = await createClient();
@@ -278,7 +284,10 @@ export async function moderateIdeaAction(formData: FormData) {
 
   if (activityError || !activity) {
     console.error("Actividad no encontrada o el usuario no es el propietario.");
-    return;
+    return {
+      error:
+        "No tenés permisos para moderar ideas en esta actividad o no existe.",
+    };
   }
 
   // 2. Validar existencia de la idea dentro de la actividad y su estado actual
@@ -291,7 +300,9 @@ export async function moderateIdeaAction(formData: FormData) {
 
   if (ideaError || !idea) {
     console.error("Idea no encontrada para la actividad especificada.");
-    return;
+    return {
+      error: "La idea no fue encontrada o ya no pertenece a esta actividad.",
+    };
   }
 
   // 3. Validar transiciones de estado permitidas:
@@ -303,7 +314,12 @@ export async function moderateIdeaAction(formData: FormData) {
   const targetStatus = parsed.data.status;
 
   if (currentStatus === targetStatus) {
-    return;
+    return {
+      success:
+        targetStatus === "published"
+          ? "La idea ya se encuentra publicada en el muro."
+          : "La idea ya se encuentra oculta del muro.",
+    };
   }
 
   // La actualización de `published_at` es gestionada de forma atómica por el trigger
@@ -319,10 +335,19 @@ export async function moderateIdeaAction(formData: FormData) {
       "Error al actualizar estado de la idea:",
       updateError.message,
     );
-    throw new Error("No pudimos actualizar el estado de la idea.");
+    return {
+      error:
+        "No pudimos actualizar el estado de la idea. Por favor, intentá de nuevo.",
+    };
   }
 
   revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
+  return {
+    success:
+      targetStatus === "published"
+        ? "Idea publicada en el muro."
+        : "Idea oculta del muro.",
+  };
 }
 
 const setModerationModeSchema = z.object({
@@ -332,7 +357,10 @@ const setModerationModeSchema = z.object({
   }),
 });
 
-export async function setModerationModeAction(formData: FormData) {
+export async function setModerationModeAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const parsed = setModerationModeSchema.safeParse({
     activityId: formData.get("activity_id"),
     moderationMode: formData.get("moderation_mode"),
@@ -342,7 +370,9 @@ export async function setModerationModeAction(formData: FormData) {
       "Error de validación en setModerationModeAction:",
       parsed.error.issues,
     );
-    return;
+    return {
+      error: parsed.error.issues[0]?.message ?? "Modo de moderación inválido.",
+    };
   }
 
   const supabase = await createClient();
@@ -362,11 +392,16 @@ export async function setModerationModeAction(formData: FormData) {
 
   if (activityError || !activity) {
     console.error("Actividad no encontrada o el usuario no es el propietario.");
-    return;
+    return {
+      error:
+        "No tenés permisos para cambiar la configuración de esta actividad.",
+    };
   }
 
   if (activity.moderation_mode === parsed.data.moderationMode) {
-    return;
+    return {
+      success: "El modo de publicación ya estaba configurado.",
+    };
   }
 
   const { error: updateError } = await supabase
@@ -380,10 +415,16 @@ export async function setModerationModeAction(formData: FormData) {
       "Error al actualizar modo de moderación:",
       updateError.message,
     );
-    throw new Error("No pudimos actualizar el modo de publicación.");
+    return {
+      error:
+        "No pudimos guardar el modo de publicación. Por favor, intentá de nuevo.",
+    };
   }
 
   revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
+  return {
+    success: "Modo de publicación actualizado correctamente.",
+  };
 }
 
 const toggleActivitySchema = z.object({
@@ -393,7 +434,10 @@ const toggleActivitySchema = z.object({
   }),
 });
 
-export async function toggleActivityAction(formData: FormData) {
+export async function toggleActivityAction(
+  _previous: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const parsed = toggleActivitySchema.safeParse({
     activityId: formData.get("activity_id"),
     status: formData.get("status"),
@@ -403,7 +447,9 @@ export async function toggleActivityAction(formData: FormData) {
       "Error de validación en toggleActivityAction:",
       parsed.error.issues,
     );
-    return;
+    return {
+      error: parsed.error.issues[0]?.message ?? "Estado de actividad inválido.",
+    };
   }
 
   const supabase = await createClient();
@@ -423,11 +469,18 @@ export async function toggleActivityAction(formData: FormData) {
 
   if (activityError || !activity) {
     console.error("Actividad no encontrada o el usuario no es el propietario.");
-    return;
+    return {
+      error: "No tenés permisos para modificar esta actividad o no existe.",
+    };
   }
 
   if (activity.status === parsed.data.status) {
-    return;
+    return {
+      success:
+        parsed.data.status === "open"
+          ? "La actividad ya se encuentra abierta."
+          : "La actividad ya se encuentra cerrada.",
+    };
   }
 
   const { error: updateError } = await supabase
@@ -447,11 +500,19 @@ export async function toggleActivityAction(formData: FormData) {
       "Error al actualizar estado de la actividad:",
       updateError.message,
     );
-    throw new Error("No pudimos cambiar el estado de la actividad.");
+    return {
+      error: "No pudimos cambiar el estado de la actividad. Intentá de nuevo.",
+    };
   }
 
   revalidatePath("/panel");
   revalidatePath(`/panel/actividad/${parsed.data.activityId}`);
+  return {
+    success:
+      parsed.data.status === "open"
+        ? "Recepción de ideas reanudada."
+        : "Recepción de ideas cerrada.",
+  };
 }
 
 export async function deleteActivityAction(
