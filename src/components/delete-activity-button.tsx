@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { deleteActivityAction } from "@/app/actions";
+import { useRef, useState } from "react";
+import { DeleteActivityModal } from "@/components/delete-activity-modal";
 
 export function DeleteActivityButton({
   activityId,
@@ -10,27 +10,36 @@ export function DeleteActivityButton({
   activityId: string;
   activityTitle: string;
 }) {
-  const [state, formAction, pending] = useActionState(deleteActivityAction, {});
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    buttonRef.current?.focus();
+  };
 
   return (
-    <form
-      action={formAction}
-      onSubmit={(event) => {
-        const confirmed = window.confirm(
-          `¿Eliminar la actividad “${activityTitle}”? Se borrarán también sus ideas y participantes. Esta acción no se puede deshacer.`,
-        );
-        if (!confirmed) event.preventDefault();
-      }}
-    >
-      <input type="hidden" name="activity_id" value={activityId} />
-      <button type="submit" className="button button-danger" disabled={pending}>
-        {pending ? "Eliminando…" : "Eliminar actividad"}
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="button button-danger"
+        onClick={handleOpenModal}
+        aria-haspopup="dialog"
+      >
+        Eliminar actividad
       </button>
-      {state.error && (
-        <p className="form-message error-message" role="alert">
-          {state.error}
-        </p>
-      )}
-    </form>
+
+      <DeleteActivityModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        activityId={activityId}
+        activityTitle={activityTitle}
+      />
+    </>
   );
 }

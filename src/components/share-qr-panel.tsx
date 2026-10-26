@@ -1,25 +1,22 @@
 "use client";
 
 import { QRCodeCanvas } from "qrcode.react";
-import { useActionState, useEffect, useState } from "react";
-import { toggleActivityAction } from "@/app/actions";
+import { useEffect, useState } from "react";
 
 type ShareQrPanelProps = {
   joinUrl: string;
   publicCode?: string;
-  activityId: string;
+  activityId?: string;
   participantCount: number;
   ideaCount: number;
-  isOpen: boolean;
+  isOpen?: boolean;
 };
 
 export function ShareQrPanel({
   joinUrl,
   publicCode,
-  activityId,
   participantCount,
   ideaCount,
-  isOpen,
 }: ShareQrPanelProps) {
   const [effectiveUrl, setEffectiveUrl] = useState(joinUrl);
   const [status, setStatus] = useState("Compartir enlace");
@@ -80,11 +77,6 @@ export function ShareQrPanel({
     }
     window.setTimeout(() => setStatus("Compartir enlace"), 1800);
   };
-
-  const [toggleState, toggleFormAction, isTogglePending] = useActionState(
-    toggleActivityAction,
-    {},
-  );
 
   return (
     <section
@@ -166,48 +158,6 @@ export function ShareQrPanel({
             <span>IDEAS</span>
             <strong>{ideaCount}</strong>
           </div>
-          <form action={toggleFormAction}>
-            <input type="hidden" name="activity_id" value={activityId} />
-            <input
-              type="hidden"
-              name="status"
-              value={isOpen ? "closed" : "open"}
-            />
-            <button
-              type="submit"
-              className={
-                isOpen ? "button button-danger" : "button button-primary"
-              }
-              disabled={isTogglePending}
-              aria-busy={isTogglePending}
-            >
-              {isTogglePending
-                ? isOpen
-                  ? "Cerrando recepción…"
-                  : "Abriendo recepción…"
-                : isOpen
-                  ? "Dejar de recibir ideas"
-                  : "Volver a recibir ideas"}
-            </button>
-            {toggleState.error && (
-              <p
-                className="form-message error-message"
-                role="alert"
-                style={{ marginTop: "6px", fontSize: "11px" }}
-              >
-                {toggleState.error}
-              </p>
-            )}
-            {toggleState.success && (
-              <p
-                className="form-message success-message"
-                role="status"
-                style={{ marginTop: "6px", fontSize: "11px" }}
-              >
-                {toggleState.success}
-              </p>
-            )}
-          </form>
         </div>
       </div>
     </section>
