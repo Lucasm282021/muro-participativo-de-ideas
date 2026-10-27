@@ -132,70 +132,14 @@ export default async function ActivityDetailPage({
           </div>
         </div>
         <div className="detail-workspace">
-          <aside
-            className="detail-sidebar"
-            aria-label="Información y configuración de la actividad"
-          >
-            <ShareQrPanel
-              joinUrl={joinUrl}
-              publicCode={activity.public_code}
-              activityId={id}
-              participantCount={participantCount ?? 0}
-              ideaCount={ideas.length}
-              isOpen={activity.status === "open"}
-            />
-            <ModerationModeForm
-              activityId={id}
-              initialMode={activity.moderation_mode}
-            />
-            <section
-              className="participants-section"
-              aria-labelledby="participants-heading"
-            >
-              <div className="section-header">
-                <div>
-                  <span className="section-kicker">DATOS DE CONTACTO</span>
-                  <h2 id="participants-heading">Participantes</h2>
-                  <p className="detail-section-description">
-                    Solo vos ves sus nombres y correos; las ideas aparecen sin
-                    autor en el muro.
-                  </p>
-                </div>
-              </div>
-              {participants?.length ? (
-                <div className="participants-list">
-                  {participants.map((participant) => (
-                    <article
-                      className="participant-row"
-                      key={participant.email}
-                    >
-                      <span className="participant-avatar" aria-hidden="true">
-                        {participant.first_name.slice(0, 1)}
-                        {participant.last_name.slice(0, 1)}
-                      </span>
-                      <strong className="participant-name">
-                        {participant.first_name} {participant.last_name}
-                      </strong>
-                      <span
-                        className="participant-email"
-                        title={participant.email}
-                      >
-                        {participant.email}
-                      </span>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-activities">
-                  <span aria-hidden="true">◌</span>
-                  <p>
-                    Todavía no hay participantes. Sus nombres y correos
-                    aparecerán acá cuando envíen una idea.
-                  </p>
-                </div>
-              )}
-            </section>
-          </aside>
+          <ShareQrPanel
+            joinUrl={joinUrl}
+            publicCode={activity.public_code}
+            activityId={id}
+            participantCount={participantCount ?? 0}
+            ideaCount={ideas.length}
+            isOpen={activity.status === "open"}
+          />
           <section
             className="moderation-section"
             aria-labelledby="moderation-section-heading"
@@ -212,6 +156,57 @@ export default async function ActivityDetailPage({
               activityId={id}
               moderationMode={activity.moderation_mode}
             />
+          </section>
+          <ModerationModeForm
+            activityId={id}
+            initialMode={activity.moderation_mode}
+          />
+          <section
+            className="participants-section"
+            aria-labelledby="participants-heading"
+          >
+            <div className="section-header">
+              <div>
+                <span className="section-kicker">DATOS DE CONTACTO</span>
+                <h2 id="participants-heading">Participantes</h2>
+                <p className="detail-section-description">
+                  Solo vos ves sus nombres y correos; las ideas aparecen sin
+                  autor en el muro.
+                </p>
+              </div>
+            </div>
+            {participants?.length ? (
+              <div className="participants-list">
+                {participants.map((participant) => (
+                  <article
+                    className="participant-row"
+                    key={participant.email}
+                  >
+                    <span className="participant-avatar" aria-hidden="true">
+                      {participant.first_name.slice(0, 1)}
+                      {participant.last_name.slice(0, 1)}
+                    </span>
+                    <strong className="participant-name">
+                      {participant.first_name} {participant.last_name}
+                    </strong>
+                    <span
+                      className="participant-email"
+                      title={participant.email}
+                    >
+                      {participant.email}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-activities">
+                <span aria-hidden="true">◌</span>
+                <p>
+                  Todavía no hay participantes. Sus nombres y correos
+                  aparecerán acá cuando envíen una idea.
+                </p>
+              </div>
+            )}
           </section>
         </div>
         <section className="danger-zone" aria-labelledby="danger-zone-heading">
