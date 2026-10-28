@@ -2,6 +2,7 @@
 
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AboutModal } from "@/components/about-modal";
 import {
   BATCH_CAP,
   type Cursor,
@@ -1256,14 +1257,14 @@ export function LiveWall({
             <div className="qr-frame">
               <QRCodeSVG
                 value={joinUrl}
-                size={144}
+                size={208}
                 level="H"
                 marginSize={4}
                 title="Código QR para participar"
                 imageSettings={{
                   src: "/muro-mark.svg",
-                  width: 28,
-                  height: 28,
+                  width: 40,
+                  height: 40,
                   excavate: true,
                   crossOrigin: "anonymous",
                 }}
@@ -1278,6 +1279,21 @@ export function LiveWall({
       </div>
       <footer className="wall-footer">
         <span>Las ideas se muestran sin nombre.</span>
+        <span className="wall-footer-author">
+          Desarrollado por Lucas Damián Montero ·{" "}
+          <AboutModal
+            triggerText="Acerca de"
+            triggerStyle={{
+              color: "inherit",
+              textDecoration: "underline",
+              background: "none",
+              border: "none",
+              padding: 0,
+              font: "inherit",
+              cursor: "pointer",
+            }}
+          />
+        </span>
         <span>Una conversación abierta.</span>
       </footer>
     </main>

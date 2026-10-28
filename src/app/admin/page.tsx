@@ -396,9 +396,7 @@ export default async function AdminDashboardPage() {
                 ✳ Gestión operativa de actividades · Eliminación protegida por
                 confirmación de código
               </span>
-              <span className="status-pill status-open">
-                Acciones activas
-              </span>
+              <span className="status-pill status-open">Acciones activas</span>
             </div>
           </div>
         </section>
@@ -471,9 +469,7 @@ export default async function AdminDashboardPage() {
                 ✳ Moderación editorial · Mutaciones atómicas con sincronización
                 de published_at
               </span>
-              <span className="status-pill status-open">
-                Acciones activas
-              </span>
+              <span className="status-pill status-open">Acciones activas</span>
             </div>
           </div>
         </section>
@@ -613,9 +609,7 @@ export default async function AdminDashboardPage() {
                 📋 Bitácora histórica · No representa inmutabilidad
                 criptográfica · Trazabilidad de soporte
               </span>
-              <span className="status-pill status-open">
-                Auditoría en vivo
-              </span>
+              <span className="status-pill status-open">Auditoría en vivo</span>
             </div>
           </div>
         </section>
