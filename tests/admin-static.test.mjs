@@ -228,9 +228,14 @@ test("checkAdminAuthorization: simulación estática de control de acceso en ser
     },
     rpc: async () => ({ data: true, error: null }),
   };
-  const tokenRevokedResult = await checkAdminAuthorization(mockTokenRevokedClient);
+  const tokenRevokedResult = await checkAdminAuthorization(
+    mockTokenRevokedClient,
+  );
   assert.equal(tokenRevokedResult.authorized, false);
-  assert.match(tokenRevokedResult.error ?? "", /No se identificó una sesión activa/);
+  assert.match(
+    tokenRevokedResult.error ?? "",
+    /No se identificó una sesión activa/,
+  );
 
   // Caso 6: is_admin retorna null o valor no booleano
   const mockNullRpcClient = {
@@ -342,14 +347,19 @@ test("consistencia arquitectónica: procedimiento alineado con esquema relaciona
 
   const docPath = path.resolve("docs/admin_role_procedure.md");
   const scriptPath = path.resolve("scripts/admin/assign_admin_global.sql");
-  const migration5Path = path.resolve("supabase/migrations/20261018040000_admin_global_authorization.sql");
+  const migration5Path = path.resolve(
+    "supabase/migrations/20261018040000_admin_global_authorization.sql",
+  );
 
   const doc = await fs.readFile(docPath, "utf-8");
   const script = await fs.readFile(scriptPath, "utf-8");
   const mig5 = await fs.readFile(migration5Path, "utf-8");
 
   // Confirmar que el tipo enum coincide con 'admin_global'
-  assert.match(mig5, /create\s+type\s+public\.app_role\s+as\s+enum\s*\(\s*'admin_global'\s*\)/);
+  assert.match(
+    mig5,
+    /create\s+type\s+public\.app_role\s+as\s+enum\s*\(\s*'admin_global'\s*\)/,
+  );
   assert.match(script, /'admin_global'/);
   assert.match(doc, /`admin_global`/);
 
@@ -362,16 +372,26 @@ test("consistencia arquitectónica: procedimiento alineado con esquema relaciona
   assert.match(mig5, /create\s+or\s+replace\s+function\s+public\.is_admin\(\)/);
   assert.match(doc, /public\.is_admin\(\)/);
 
-  // Confirmar que el documento advierte explícitamente sobre la limitación de auditoría en el esquema actual
+  // Confirmar que el documento y el script documentan la auditoría transaccional (trg_audit_user_roles) y la limitación de actor_id = NULL
   assert.match(
     doc,
-    /user_roles[\s\S]*no cuenta con triggers de auditoría automática/i,
-    "El documento debe advertir sobre la ausencia de triggers en user_roles en el esquema actual",
+    /trg_audit_user_roles/,
+    "El documento debe documentar el trigger trg_audit_user_roles",
+  );
+  assert.match(
+    doc,
+    /actor_id\s*=\s*NULL/i,
+    "El documento debe advertir sobre la limitación de actor_id = NULL en consola administrativa",
   );
   assert.match(
     script,
-    /user_roles[\s\S]*no cuenta[\s\S]*triggers automáticos/i,
-    "El script debe advertir sobre la ausencia de triggers en user_roles en el esquema actual",
+    /trg_audit_user_roles/,
+    "El script debe documentar el trigger trg_audit_user_roles",
+  );
+  assert.match(
+    script,
+    /actor_id[\s\S]*NULL/i,
+    "El script debe advertir sobre la limitación de actor_id = NULL en consola administrativa",
   );
 });
 
@@ -601,7 +621,10 @@ test("auditoría v2: payload consolidado con tres conteos y contract_version=2",
   );
 
   assert.equal(simple.get("ideas_deleted_count"), "0");
-  assert.equal(simple.get("participants_deleted_count"), "v_participants_count");
+  assert.equal(
+    simple.get("participants_deleted_count"),
+    "v_participants_count",
+  );
   assert.equal(
     simple.get("idea_authors_deleted_count"),
     "v_idea_authors_count",
@@ -616,9 +639,7 @@ test("auditoría v2: payload consolidado con tres conteos y contract_version=2",
 
 test("auditoría v2: el borrado individual no altera los contadores de cascada", async () => {
   const sql = await readFile(AUDIT_V2_MIGRATION, "utf8");
-  const ideaDelete = normalizeSql(
-    extractFunction(sql, "fn_audit_idea_delete"),
-  );
+  const ideaDelete = normalizeSql(extractFunction(sql, "fn_audit_idea_delete"));
 
   assert.doesNotMatch(ideaDelete, /ideas_count\s*=\s*ideas_count\s*\+\s*1/i);
   assert.doesNotMatch(ideaDelete, /update\s+public\.audit_cascade_context/i);
@@ -655,11 +676,250 @@ test("auditoría v2: compatibilidad histórica sin backfill ni mutación de audi
     path.resolve("src/app/admin/page.tsx"),
     "utf8",
   );
-  assert.doesNotMatch(
+  assert.match(
     adminPage,
-    /contract_version|participants_deleted_count|idea_authors_deleted_count/,
-    "La UI no debe asumir campos v2 al mostrar registros históricos",
+    /contract_version/,
+    "La UI debe dar soporte explícito a contract_version de auditoría",
   );
+  assert.match(
+    adminPage,
+    /participants_deleted_count/,
+    "La UI debe dar soporte a participants_deleted_count",
+  );
+  assert.match(
+    adminPage,
+    /idea_authors_deleted_count/,
+    "La UI debe dar soporte a idea_authors_deleted_count",
+  );
+});
+
+test("auditoría UI: presentación de eventos activity_delete, activity_delete_cascade (V1 y V2) y preservación de eventos", async () => {
+  const adminPageCode = await readFile(
+    path.resolve("src/app/admin/page.tsx"),
+    "utf8",
+  );
+
+  // Extraer e instanciar la función pura resolveAuditPresentation desde page.tsx
+  const slice = adminPageCode.slice(
+    adminPageCode.indexOf("function isValidCount"),
+    adminPageCode.indexOf("export default async function AdminDashboardPage"),
+  );
+  const js = slice
+    .replace(/export\s+/g, "")
+    .replace(/: val is number/g, "")
+    .replace(/: string \| null/g, "")
+    .replace(/: string\[\]/g, "")
+    .replace(/: unknown/g, "")
+    .replace(/: string/g, "")
+    .replace(/: Record<string, unknown> \| null/g, "")
+    .replace(/: \{[\s\S]*?\}/g, "");
+  const resolveAuditPresentation = new Function(
+    `${js}; return resolveAuditPresentation;`,
+  )();
+
+  // 1. Evento activity_delete con código público
+  const actDelWithCode = resolveAuditPresentation({
+    action: "activity_delete",
+    payload: { public_code: "CASC0002" },
+  });
+  assert.equal(actDelWithCode.actionBadge.label, "Borrado de actividad");
+  assert.equal(actDelWithCode.detailText, "Actividad CASC0002 eliminada");
+
+  // 2. Evento activity_delete sin código público o inválido
+  const actDelNoCode = resolveAuditPresentation({
+    action: "activity_delete",
+    payload: { public_code: "   " },
+  });
+  assert.equal(actDelNoCode.actionBadge.label, "Borrado de actividad");
+  assert.equal(actDelNoCode.detailText, "Actividad eliminada");
+
+  const actDelNullPayload = resolveAuditPresentation({
+    action: "activity_delete",
+    payload: null,
+  });
+  assert.equal(actDelNullPayload.actionBadge.label, "Borrado de actividad");
+  assert.equal(actDelNullPayload.detailText, "Actividad eliminada");
+
+  // 3. Evento activity_delete_cascade Contrato V2 (conteos válidos, plural)
+  const v2Plural = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: 2,
+      public_code: "CASC0001",
+      ideas_deleted_count: 3,
+      participants_deleted_count: 2,
+      idea_authors_deleted_count: 4,
+    },
+  });
+  assert.equal(v2Plural.actionBadge.label, "Borrado de actividad");
+  assert.equal(
+    v2Plural.detailText,
+    "Actividad CASC0001 eliminada (3 ideas, 2 participantes, 4 autores)",
+  );
+
+  // 4. Evento activity_delete_cascade Contrato V2 (singular)
+  const v2Singular = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: "2",
+      public_code: "CASC0001",
+      ideas_deleted_count: 1,
+      participants_deleted_count: 1,
+      idea_authors_deleted_count: 1,
+    },
+  });
+  assert.equal(
+    v2Singular.detailText,
+    "Actividad CASC0001 eliminada (1 idea, 1 participante, 1 autor)",
+  );
+
+  // 5. Evento activity_delete_cascade Contrato V2 (conteos en cero legítimos)
+  const v2Zeros = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: 2,
+      public_code: "CASC0001",
+      ideas_deleted_count: 0,
+      participants_deleted_count: 0,
+      idea_authors_deleted_count: 0,
+    },
+  });
+  assert.equal(
+    v2Zeros.detailText,
+    "Actividad CASC0001 eliminada (0 ideas, 0 participantes, 0 autores)",
+  );
+
+  // 6. Evento activity_delete_cascade Contrato V2 con valores nulos o inválidos (no inventa datos)
+  const v2InvalidCounts = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: 2,
+      public_code: "CASC0001",
+      ideas_deleted_count: 2,
+      participants_deleted_count: null,
+      idea_authors_deleted_count: "cuatro",
+    },
+  });
+  assert.equal(
+    v2InvalidCounts.detailText,
+    "Actividad CASC0001 eliminada (2 ideas)",
+  );
+
+  // 7. Evento activity_delete_cascade V2 sin código público
+  const v2NoCode = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: 2,
+      ideas_deleted_count: 3,
+      participants_deleted_count: 1,
+      idea_authors_deleted_count: 2,
+    },
+  });
+  assert.equal(
+    v2NoCode.detailText,
+    "Actividad eliminada (3 ideas, 1 participante, 2 autores)",
+  );
+
+  // 8. Evento activity_delete_cascade Histórico V1 (sin contract_version, con ideas_deleted_count)
+  const v1Historic = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      public_code: "HIST0001",
+      ideas_deleted_count: 5,
+    },
+  });
+  assert.equal(v1Historic.actionBadge.label, "Borrado de actividad");
+  assert.equal(v1Historic.detailText, "Actividad HIST0001 eliminada (5 ideas)");
+
+  const v1HistoricSingular = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      public_code: "HIST0001",
+      ideas_deleted_count: 1,
+    },
+  });
+  assert.equal(
+    v1HistoricSingular.detailText,
+    "Actividad HIST0001 eliminada (1 idea)",
+  );
+
+  // 8b. Evento activity_delete_cascade V1 con contract_version explícitamente null
+  const v1HistoricExplicitNull = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: null,
+      public_code: "HIST0002",
+      ideas_deleted_count: 2,
+    },
+  });
+  assert.equal(
+    v1HistoricExplicitNull.detailText,
+    "Actividad HIST0002 eliminada (2 ideas)",
+  );
+
+  // 9. Evento activity_delete_cascade Histórico V1 sin conteo o conteo nulo
+  const v1HistoricNoCount = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      public_code: "HIST0001",
+      ideas_deleted_count: null,
+    },
+  });
+  assert.equal(v1HistoricNoCount.detailText, "Actividad HIST0001 eliminada");
+
+  // 9b. Versión desconocida (ej. 99): no interpretar como V1 ni mostrar conteos
+  const unknownVersion = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: 99,
+      public_code: "UNK00001",
+      ideas_deleted_count: 5,
+      participants_deleted_count: 3,
+    },
+  });
+  assert.equal(unknownVersion.actionBadge.label, "Borrado de actividad");
+  assert.equal(unknownVersion.detailText, "Actividad UNK00001 eliminada");
+
+  // 9c. Versión de tipo inesperado (ej. "corrupto"): no interpretar como V1 ni mostrar conteos
+  const corruptVersion = resolveAuditPresentation({
+    action: "activity_delete_cascade",
+    payload: {
+      contract_version: "corrupto",
+      public_code: "CORR0001",
+      ideas_deleted_count: 10,
+    },
+  });
+  assert.equal(corruptVersion.actionBadge.label, "Borrado de actividad");
+  assert.equal(corruptVersion.detailText, "Actividad CORR0001 eliminada");
+
+  // 10. Preservación de eventos existentes
+  const modEvent = resolveAuditPresentation({
+    action: "idea_moderate_status",
+    payload: { old_status: "pending", new_status: "published" },
+  });
+  assert.equal(modEvent.actionBadge.label, "Moderación Idea");
+  assert.equal(modEvent.detailText, "pending → published");
+
+  const statusEvent = resolveAuditPresentation({
+    action: "activity_status_change",
+    payload: { old_status: "open", new_status: "closed", public_code: "ACT01" },
+  });
+  assert.equal(statusEvent.actionBadge.label, "Ciclo Actividad");
+  assert.equal(statusEvent.detailText, "open → closed (ACT01)");
+
+  const ideaDelEvent = resolveAuditPresentation({
+    action: "idea_delete_individual",
+    payload: { content_length: 42 },
+  });
+  assert.equal(ideaDelEvent.actionBadge.label, "Borrado Idea");
+  assert.equal(ideaDelEvent.detailText, "Idea eliminada (longitud: 42)");
+
+  const unknownEvent = resolveAuditPresentation({
+    action: "unknown_audit_action",
+    payload: {},
+  });
+  assert.equal(unknownEvent.actionBadge.label, "unknown_audit_action");
+  assert.equal(unknownEvent.detailText, "Registro de operación");
 });
 
 test("auditoría v2: funciones endurecidas y sin ejecución directa", async () => {
@@ -673,7 +933,11 @@ test("auditoría v2: funciones endurecidas y sin ejecución directa", async () =
   ]) {
     const fn = normalizeSql(extractFunction(sql, name));
 
-    assert.match(fn, /security\s+definer/i, `${name} debe ser SECURITY DEFINER`);
+    assert.match(
+      fn,
+      /security\s+definer/i,
+      `${name} debe ser SECURITY DEFINER`,
+    );
     assert.match(
       fn,
       /set\s+search_path\s*=\s*''/i,
@@ -688,4 +952,136 @@ test("auditoría v2: funciones endurecidas y sin ejecución directa", async () =
   }
 });
 
+// ============================================================================
+// P1-R121 AU-2: Política de acceso exclusivo a /admin (HTTP 403 forbidden)
+// ============================================================================
 
+test("política de acceso /admin: configuración experimental authInterrupts habilitada", async () => {
+  const nextConfigPath = path.resolve("next.config.ts");
+  const nextConfigCode = await readFile(nextConfigPath, "utf-8");
+
+  assert.match(
+    nextConfigCode,
+    /experimental\s*:\s*\{[\s\S]*?authInterrupts\s*:\s*true[\s\S]*?\}/,
+    "next.config.ts debe activar experimental.authInterrupts para dar soporte a forbidden()",
+  );
+});
+
+test("política de acceso /admin: existencia de página institucional 403 (forbidden.tsx)", async () => {
+  const forbiddenPath = path.resolve("src/app/admin/forbidden.tsx");
+  const forbiddenCode = await readFile(forbiddenPath, "utf-8");
+
+  assert.match(
+    forbiddenCode,
+    /export\s+default\s+function\s+Forbidden\s*\(/,
+    "src/app/admin/forbidden.tsx debe exportar por defecto el componente Forbidden",
+  );
+  assert.match(
+    forbiddenCode,
+    /403/,
+    "src/app/admin/forbidden.tsx debe reflejar el código 403",
+  );
+  assert.match(
+    forbiddenCode,
+    /\/panel/,
+    "src/app/admin/forbidden.tsx debe ofrecer enlace de navegación segura hacia /panel",
+  );
+
+  // No debe exponer métricas ni tablas de datos
+  assert.doesNotMatch(
+    forbiddenCode,
+    /\.from\(\s*["']activities["']\s*\)/,
+    "forbidden.tsx no debe consultar activities",
+  );
+  assert.doesNotMatch(
+    forbiddenCode,
+    /\.from\(\s*["']ideas["']\s*\)/,
+    "forbidden.tsx no debe consultar ideas",
+  );
+  assert.doesNotMatch(
+    forbiddenCode,
+    /\.from\(\s*["']audit_logs["']\s*\)/,
+    "forbidden.tsx no debe consultar audit_logs",
+  );
+});
+
+test("política de acceso /admin: orden estricto de ejecución y denegación antes de consultas", async () => {
+  const adminPagePath = path.resolve("src/app/admin/page.tsx");
+  const adminPageCode = await readFile(adminPagePath, "utf-8");
+
+  // 1. Debe importar forbidden de next/navigation
+  assert.match(
+    adminPageCode,
+    /import\s*\{[^}]*forbidden[^}]*\}\s*from\s*["']next\/navigation["']/,
+    "src/app/admin/page.tsx debe importar forbidden de next/navigation",
+  );
+
+  // 2. Erradicación total de la vista previa sin rol
+  assert.doesNotMatch(
+    adminPageCode,
+    /Vista previa · Sin rol asignado/,
+    "src/app/admin/page.tsx no debe contener «Vista previa · Sin rol asignado»",
+  );
+
+  // 3. Orden estricto: getUser -> checkAdminAuthorization -> if (!authResult.authorized) forbidden() -> queries
+  const getUserIdx = adminPageCode.indexOf("getUser()");
+  const checkAuthIdx = adminPageCode.indexOf("checkAdminAuthorization(");
+  const forbiddenCallIdx = adminPageCode.indexOf("forbidden()");
+  const fromActivitiesIdx = adminPageCode.indexOf('.from("activities")');
+  const fromIdeasIdx = adminPageCode.indexOf('.from("ideas")');
+  const fromAuditLogsIdx = adminPageCode.indexOf('.from("audit_logs")');
+
+  assert.ok(getUserIdx !== -1, "Debe contener llamada a getUser()");
+  assert.ok(
+    checkAuthIdx !== -1,
+    "Debe contener llamada a checkAdminAuthorization",
+  );
+  assert.ok(forbiddenCallIdx !== -1, "Debe contener llamada a forbidden()");
+  assert.ok(fromActivitiesIdx !== -1, "Debe consultar activities");
+  assert.ok(fromIdeasIdx !== -1, "Debe consultar ideas");
+  assert.ok(fromAuditLogsIdx !== -1, "Debe consultar audit_logs");
+
+  assert.ok(
+    getUserIdx < checkAuthIdx,
+    "getUser() debe ocurrir antes de checkAdminAuthorization",
+  );
+  assert.ok(
+    checkAuthIdx < forbiddenCallIdx,
+    "checkAdminAuthorization debe ocurrir antes de forbidden()",
+  );
+  assert.ok(
+    forbiddenCallIdx < fromActivitiesIdx,
+    "forbidden() debe evaluarse antes de consultar activities",
+  );
+  assert.ok(
+    forbiddenCallIdx < fromIdeasIdx,
+    "forbidden() debe evaluarse antes de consultar ideas",
+  );
+  assert.ok(
+    forbiddenCallIdx < fromAuditLogsIdx,
+    "forbidden() debe evaluarse antes de consultar audit_logs",
+  );
+});
+
+test("política de acceso /admin: conservación de guardas en Server Actions", async () => {
+  const adminActionsPath = path.resolve("src/app/admin/actions.ts");
+  const actionsCode = await readFile(adminActionsPath, "utf-8");
+
+  const requiredActions = [
+    "adminModerateIdeaAction",
+    "adminToggleActivityAction",
+    "adminDeleteIdeaAction",
+    "adminDeleteActivityAction",
+  ];
+
+  for (const actionName of requiredActions) {
+    const actionRegex = new RegExp(
+      `export\\s+async\\s+function\\s+${actionName}[\\s\\S]*?checkAdminAuthorization`,
+    );
+    assert.match(
+      actionsCode,
+      actionRegex,
+      `${actionName} debe contener guarda explícita de checkAdminAuthorization`,
+    );
+  }
+});
