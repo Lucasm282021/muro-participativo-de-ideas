@@ -1,8 +1,8 @@
 "use client";
 
-import { AboutModal } from "@/components/about-modal";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AboutModal } from "@/components/about-modal";
 import {
   BATCH_CAP,
   type Cursor,
