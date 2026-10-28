@@ -2062,6 +2062,7 @@ textarea:focus-visible {
   grid-template-columns: repeat(var(--grid-cols, 8), minmax(0, 1fr));
   grid-template-rows: repeat(var(--grid-rows, 6), minmax(0, 1fr));
   grid-auto-flow: dense;
+  align-content: start;
   gap: clamp(6px, 0.8vw, 12px);
   width: 100%;
   height: 100%;
@@ -2824,7 +2825,12 @@ textarea:focus-visible {
   }
   .idea-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(125px, auto);
     gap: 9px;
+    height: auto;
+    max-height: 100%;
+    overflow-y: auto;
   }
   .idea-card {
     min-height: 125px;
