@@ -16,6 +16,126 @@ export const metadata = {
     "Panel centralizado de supervisión, moderación y control operativo.",
 };
 
+function isValidCount(val: unknown): val is number {
+  return typeof val === "number" && Number.isInteger(val) && val >= 0;
+}
+
+function resolveActivityCode(
+  payload: Record<string, unknown> | null,
+): string | null {
+  if (
+    payload &&
+    typeof payload.public_code === "string" &&
+    payload.public_code.trim().length > 0
+  ) {
+    return payload.public_code.trim();
+  }
+  return null;
+}
+
+export function resolveAuditPresentation(log: {
+  action: string;
+  payload: Record<string, unknown> | null;
+}) {
+  let actionBadge = {
+    label: log.action,
+    bg: "#f0eee4",
+    color: "#555",
+  };
+
+  if (log.action === "idea_moderate_status") {
+    actionBadge = {
+      label: "Moderación Idea",
+      bg: "#fdf8ee",
+      color: "#745814",
+    };
+  } else if (log.action === "activity_status_change") {
+    actionBadge = {
+      label: "Ciclo Actividad",
+      bg: "#f1f6ed",
+      color: "#2f5c35",
+    };
+  } else if (log.action === "idea_delete_individual") {
+    actionBadge = {
+      label: "Borrado Idea",
+      bg: "#fdf5f4",
+      color: "#923226",
+    };
+  } else if (
+    log.action === "activity_delete" ||
+    log.action === "activity_delete_cascade"
+  ) {
+    actionBadge = {
+      label: "Borrado de actividad",
+      bg: "#fdf5f4",
+      color: "#923226",
+    };
+  }
+
+  let detailText = "Registro de operación";
+
+  if (log.action === "idea_moderate_status") {
+    detailText = `${String(log.payload?.old_status ?? "")} → ${String(log.payload?.new_status ?? "")}`;
+  } else if (log.action === "activity_status_change") {
+    detailText = `${String(log.payload?.old_status ?? "")} → ${String(log.payload?.new_status ?? "")} (${String(log.payload?.public_code ?? "")})`;
+  } else if (log.action === "idea_delete_individual") {
+    detailText = `Idea eliminada (longitud: ${String(log.payload?.content_length ?? "-")})`;
+  } else if (log.action === "activity_delete") {
+    const code = resolveActivityCode(log.payload);
+    detailText = code ? `Actividad ${code} eliminada` : "Actividad eliminada";
+  } else if (log.action === "activity_delete_cascade") {
+    const code = resolveActivityCode(log.payload);
+    const baseText = code
+      ? `Actividad ${code} eliminada`
+      : "Actividad eliminada";
+
+    const payload = log.payload;
+    const isV2 =
+      payload !== null &&
+      typeof payload === "object" &&
+      (payload.contract_version === 2 || payload.contract_version === "2");
+    const isV1 =
+      payload !== null &&
+      typeof payload === "object" &&
+      (payload.contract_version === undefined ||
+        payload.contract_version === null);
+
+    if (isV2) {
+      const parts: string[] = [];
+      if (isValidCount(payload.ideas_deleted_count)) {
+        const count = payload.ideas_deleted_count;
+        parts.push(`${count} ${count === 1 ? "idea" : "ideas"}`);
+      }
+      if (isValidCount(payload.participants_deleted_count)) {
+        const count = payload.participants_deleted_count;
+        parts.push(
+          `${count} ${count === 1 ? "participante" : "participantes"}`,
+        );
+      }
+      if (isValidCount(payload.idea_authors_deleted_count)) {
+        const count = payload.idea_authors_deleted_count;
+        parts.push(`${count} ${count === 1 ? "autor" : "autores"}`);
+      }
+
+      detailText =
+        parts.length > 0 ? `${baseText} (${parts.join(", ")})` : baseText;
+    } else if (isV1) {
+      // Registros históricos V1: contract_version ausente o null
+      if (isValidCount(payload.ideas_deleted_count)) {
+        const count = payload.ideas_deleted_count;
+        detailText = `${baseText} (${count} ${count === 1 ? "idea" : "ideas"})`;
+      } else {
+        detailText = baseText;
+      }
+    } else {
+      // Versión desconocida o malformada: no interpretar como V1 ni inventar conteos
+      detailText = baseText;
+    }
+  }
+
+  return { actionBadge, detailText };
+}
+
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
@@ -409,47 +529,8 @@ export default async function AdminDashboardPage() {
                         ? `admin-${log.payload.actor_id_snapshot.slice(0, 8)}`
                         : "Sistema";
 
-                    let actionBadge = {
-                      label: log.action,
-                      bg: "#f0eee4",
-                      color: "#555",
-                    };
-                    if (log.action === "idea_moderate_status") {
-                      actionBadge = {
-                        label: "Moderación Idea",
-                        bg: "#fdf8ee",
-                        color: "#745814",
-                      };
-                    } else if (log.action === "activity_status_change") {
-                      actionBadge = {
-                        label: "Ciclo Actividad",
-                        bg: "#f1f6ed",
-                        color: "#2f5c35",
-                      };
-                    } else if (log.action === "idea_delete_individual") {
-                      actionBadge = {
-                        label: "Borrado Idea",
-                        bg: "#fdf5f4",
-                        color: "#923226",
-                      };
-                    } else if (log.action === "activity_delete_cascade") {
-                      actionBadge = {
-                        label: "Borrado Actividad",
-                        bg: "#fdf5f4",
-                        color: "#923226",
-                      };
-                    }
-
-                    let detailText = "Registro de operación";
-                    if (log.action === "idea_moderate_status") {
-                      detailText = `${String(log.payload?.old_status ?? "")} → ${String(log.payload?.new_status ?? "")}`;
-                    } else if (log.action === "activity_status_change") {
-                      detailText = `${String(log.payload?.old_status ?? "")} → ${String(log.payload?.new_status ?? "")} (${String(log.payload?.public_code ?? "")})`;
-                    } else if (log.action === "idea_delete_individual") {
-                      detailText = `Idea eliminada (longitud: ${String(log.payload?.content_length ?? "-")})`;
-                    } else if (log.action === "activity_delete_cascade") {
-                      detailText = `Actividad ${String(log.payload?.public_code ?? "")} eliminada`;
-                    }
+                    const { actionBadge, detailText } =
+                      resolveAuditPresentation(log);
 
                     return (
                       <tr key={log.id}>
