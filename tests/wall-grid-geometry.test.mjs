@@ -64,17 +64,29 @@ test('GEOM-03: No estiramiento artificial con getWideIdeaIds en baja densidad', 
   assert.equal(wideSet.has('idea-1'), false, '1 idea no debe marcarse como span 2');
 });
 
-test('GEOM-04: Escenarios de alta densidad (24, 30 y 48 ideas sin scroll)', () => {
+test('GEOM-04: Escenarios de alta densidad y preservación de legibilidad (tope 30 por viewport)', () => {
   const c24 = getGridConfig(24, 1600, 850);
-  assert.ok(c24.cols * c24.rows >= 24, 'Capacidad >= 24 celdas');
+  assert.equal(c24.cols, 6);
+  assert.equal(c24.rows, 4, '24 ideas ocupan 6x4 celdas');
 
   const c30 = getGridConfig(30, 1600, 850);
-  assert.ok(c30.cols * c30.rows >= 30, 'Capacidad >= 30 celdas');
+  assert.equal(c30.cols, 6);
+  assert.equal(c30.rows, 5, '30 ideas entran exactamente en 6x5 celdas sin scroll');
 
+  const gap = 8;
+  const width30 = (1600 - gap * (c30.cols - 1)) / c30.cols;
+  const height30 = (850 - gap * (c30.rows - 1)) / c30.rows;
+  assert.ok(width30 >= 260, `Ancho con 30 ideas (${width30.toFixed(1)}px) >= 260px`);
+  assert.ok(height30 >= 160, `Alto con 30 ideas (${height30.toFixed(1)}px) >= 160px`);
+
+  // Escenario 48 ideas: conserva ancho y alto legibles sin achicar tarjetas a estampillas
   const c48 = getGridConfig(48, 1600, 850);
-  assert.ok(c48.cols * c48.rows >= 48, 'Capacidad >= 48 celdas');
-  assert.equal(c48.cols, 8);
-  assert.equal(c48.rows, 6);
+  assert.equal(c48.cols, 6, 'Mantiene 6 columnas legibles (nunca 8)');
+  assert.equal(c48.rows, 8, '8 filas accesibles mediante scroll suave');
+
+  const visibleRows = Math.min(c48.rows, 5);
+  const height48 = (850 - gap * (visibleRows - 1)) / visibleRows;
+  assert.ok(height48 >= 160, `Alto con 48 ideas (${height48.toFixed(1)}px) conserva >= 160px`);
 });
 
 test('GEOM-05: Entorno Mobile (400x700 px útiles)', () => {
@@ -83,9 +95,11 @@ test('GEOM-05: Entorno Mobile (400x700 px útiles)', () => {
   assert.ok(cMobile.rows >= 3, 'Mobile asigna filas proporcionadas');
 });
 
-test('TYPO-01: Tipografía legible en baja densidad (sin gigantismo)', () => {
-  const typo = calculateCardTypography('Prueba de idea corta', 313, 206);
+test('TYPO-01: Tipografía y lectura completa de ideas largas en alta densidad', () => {
+  // Idea extensa de 180 caracteres
+  const longIdea = 'Propongo que armemos un taller semanal de diseño colaborativo donde cada equipo presente sus avances y podamos darnos feedback constructivo para mejorar la calidad del producto.';
+  const typo = calculateCardTypography(longIdea, 260, 162);
   const size = parseFloat(typo.fontSize);
-  assert.ok(size >= 16 && size <= 32, `Tipografía (${size}px) en rango editorial armónico`);
-  assert.ok(typo.lineClamp >= 3, 'Permite al menos 3 líneas de lectura');
+  assert.ok(size >= 12 && size <= 18, `Tipografía (${size}px) en rango legible para párrafos editoriales`);
+  assert.ok(typo.lineClamp >= 5, `lineClamp (${typo.lineClamp}) permite leer hasta 6 o 7 líneas completas sin truncamiento`);
 });

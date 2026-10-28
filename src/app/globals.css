@@ -2067,7 +2067,10 @@ textarea:focus-visible {
   width: 100%;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(65, 74, 62, 0.25) transparent;
 }
 .idea-card {
   height: 100%;

@@ -67,12 +67,14 @@ function getGridConfig(
       return { cols: baseCols, rows: baseRows };
     }
 
-    // Alta densidad (> capacidad natural, hasta 48 ideas sin scroll):
+    // Alta densidad con prioridad de legibilidad (máximo 6 cols x 5 filas por viewport):
     if (count <= 24) return { cols: Math.max(baseCols, 6), rows: 4 };
     if (count <= 30) return { cols: Math.max(baseCols, 6), rows: 5 };
-    if (count <= 36) return { cols: Math.max(baseCols, 6), rows: 6 };
-    if (count <= 42) return { cols: 7, rows: 6 };
-    return { cols: 8, rows: 6 };
+    // Con más de 30 ideas, se preserva el ancho legible de 6 columnas y las filas crecen
+    // con altura cómoda (~160px) con desplazamiento suave, sin truncar texto en 3 líneas:
+    const maxCols = Math.max(baseCols, 6);
+    const scrollRows = Math.ceil(count / maxCols);
+    return { cols: maxCols, rows: scrollRows };
   } else {
     // Pantallas verticales (portrait / mobile / tablets)
     const targetWidth = 240;
@@ -1157,9 +1159,10 @@ export function LiveWall({
     containerSize.width > 0
       ? (containerSize.width - gap * (cols - 1)) / cols
       : 200;
+  const visibleRows = Math.min(rows, 5);
   const cellHeight =
     containerSize.height > 0
-      ? (containerSize.height - gap * (rows - 1)) / rows
+      ? (containerSize.height - gap * (visibleRows - 1)) / visibleRows
       : 150;
 
   return (
