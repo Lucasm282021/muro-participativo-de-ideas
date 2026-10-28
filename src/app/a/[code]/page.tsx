@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AboutModal } from "@/components/about-modal";
 import { IdeaForm } from "@/components/idea-form";
 import { createPublicClient } from "@/lib/supabase/public";
 
@@ -27,9 +28,21 @@ export default async function JoinActivityPage({
             muro<span className="brand-light">común</span>
           </span>
         </Link>
-        <span className={`status-pill status-${activity.status}`}>
-          {isOpen ? "Actividad abierta" : "Actividad cerrada"}
-        </span>
+        <div className="nav-actions">
+          <AboutModal
+            triggerClassName="nav-signin"
+            triggerText="Acerca de"
+            triggerStyle={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+            }}
+          />
+          <span className={`status-pill status-${activity.status}`}>
+            {isOpen ? "Actividad abierta" : "Actividad cerrada"}
+          </span>
+        </div>
       </header>
       <div className="join-layout">
         <section className="join-copy">
