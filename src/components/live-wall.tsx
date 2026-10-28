@@ -44,30 +44,57 @@ function getGridConfig(
   const isWide = aspect >= 1.2;
 
   if (isWide) {
-    if (count === 1) return { cols: 1, rows: 1 };
-    if (count === 2) return { cols: 2, rows: 1 };
-    if (count === 3) return { cols: 2, rows: 2 };
-    if (count === 4) return { cols: 2, rows: 2 };
-    if (count <= 6) return { cols: 3, rows: 2 };
-    if (count <= 8) return { cols: 4, rows: 2 };
-    if (count === 9) return { cols: 3, rows: 3 };
-    if (count <= 12) return { cols: 4, rows: 3 };
-    if (count <= 16) return { cols: 4, rows: 4 };
-    if (count <= 20) return { cols: 5, rows: 4 };
-    if (count <= 24) return { cols: 6, rows: 4 };
-    if (count <= 30) return { cols: 6, rows: 5 };
-    if (count <= 36) return { cols: 6, rows: 6 };
+    // Dimensiones objetivo para tarjetas de tamaño natural en escritorio/proyector (260-320px ancho, 160-220px alto)
+    const targetWidth = 285;
+    const targetHeight = 185;
+    const gap = 8;
+
+    const baseCols =
+      containerWidth > 0
+        ? Math.max(2, Math.min(6, Math.floor((containerWidth + gap) / (targetWidth + gap))))
+        : 4;
+    const baseRows =
+      containerHeight > 0
+        ? Math.max(2, Math.min(5, Math.floor((containerHeight + gap) / (targetHeight + gap))))
+        : 4;
+
+    const naturalCapacity = baseCols * baseRows;
+
+    // Llenado progresivo en baja y media densidad:
+    // La grilla mantiene columnas y filas estables según la pantalla para que las tarjetas
+    // no se deformen ni se expandan a pantalla completa cuando hay pocas ideas.
+    if (count <= naturalCapacity) {
+      return { cols: baseCols, rows: baseRows };
+    }
+
+    // Alta densidad (> capacidad natural, hasta 48 ideas sin scroll):
+    if (count <= 24) return { cols: Math.max(baseCols, 6), rows: 4 };
+    if (count <= 30) return { cols: Math.max(baseCols, 6), rows: 5 };
+    if (count <= 36) return { cols: Math.max(baseCols, 6), rows: 6 };
     if (count <= 42) return { cols: 7, rows: 6 };
     return { cols: 8, rows: 6 };
   } else {
-    if (count === 1) return { cols: 1, rows: 1 };
-    if (count === 2) return { cols: 1, rows: 2 };
-    if (count <= 4) return { cols: 2, rows: 2 };
-    if (count <= 6) return { cols: 2, rows: 3 };
-    if (count <= 8) return { cols: 2, rows: 4 };
-    if (count <= 12) return { cols: 3, rows: 4 };
-    if (count <= 16) return { cols: 4, rows: 4 };
-    if (count <= 20) return { cols: 4, rows: 5 };
+    // Pantallas verticales (portrait / mobile / tablets)
+    const targetWidth = 240;
+    const targetHeight = 160;
+    const gap = 8;
+
+    const baseCols =
+      containerWidth > 0
+        ? Math.max(2, Math.min(4, Math.floor((containerWidth + gap) / (targetWidth + gap))))
+        : 2;
+    const baseRows =
+      containerHeight > 0
+        ? Math.max(3, Math.min(6, Math.floor((containerHeight + gap) / (targetHeight + gap))))
+        : 4;
+
+    const naturalCapacity = baseCols * baseRows;
+
+    if (count <= naturalCapacity) {
+      return { cols: baseCols, rows: baseRows };
+    }
+
+    if (count <= 16) return { cols: 3, rows: 6 };
     if (count <= 24) return { cols: 4, rows: 6 };
     if (count <= 30) return { cols: 5, rows: 6 };
     if (count <= 36) return { cols: 6, rows: 6 };
@@ -77,6 +104,12 @@ function getGridConfig(
 }
 
 function getWideIdeaIds(ideas: Idea[], totalSlots: number): Set<string> {
+  // En fase de llenado progresivo (cuando hay celdas vacías por llenar),
+  // las tarjetas conservan su tamaño individual uniforme sin estirarse para cubrir celdas vacías.
+  if (ideas.length < Math.floor(totalSlots * 0.75)) {
+    return new Set();
+  }
+
   const extraSlots = totalSlots - ideas.length;
   if (extraSlots <= 0 || ideas.length === 0) return new Set();
 
