@@ -77,10 +77,22 @@ function getGridConfig(
 }
 
 function getWideIdeaIds(ideas: Idea[], totalSlots: number): Set<string> {
-  const extraSlots = totalSlots - ideas.length;
-  if (extraSlots <= 0 || ideas.length === 0) return new Set();
+  // Regla 1: Solo ideas de longitud sustancial (mínimo 75 caracteres) son elegibles para 2 columnas
+  const eligibleIdeas = ideas.filter(
+    (idea) => idea.content.trim().length >= 75,
+  );
+  if (eligibleIdeas.length === 0) return new Set();
 
-  const sorted = [...ideas].sort(
+  // Regla 2: En fase de llenado progresivo se preserva el orden uniforme de 1 columna
+  if (ideas.length < Math.floor(totalSlots * 0.75)) {
+    return new Set();
+  }
+
+  const extraSlots = totalSlots - ideas.length;
+  if (extraSlots <= 0) return new Set();
+
+  // Ordenar elegibles de mayor a menor longitud
+  const sorted = [...eligibleIdeas].sort(
     (a, b) => b.content.trim().length - a.content.trim().length,
   );
   const wideSet = new Set<string>();
