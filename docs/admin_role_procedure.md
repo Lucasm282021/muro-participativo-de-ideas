@@ -226,3 +226,10 @@ Para mitigar riesgos de elevación de privilegios:
 - Queda terminantemente prohibido crear rutas API (`/api/admin/roles`), Server Actions o funciones RPC que acepten UUIDs y otorguen o modifiquen roles.
 - La tabla `public.user_roles` debe permanecer sin permisos (`REVOKE ALL`) para los roles de conexión de la aplicación (`anon`, `authenticated`).
 - El único medio válido de otorgamiento de privilegios es el procedimiento administrativo de infraestructura detallado en este documento.
+
+---
+
+## 9. Registro Histórico de Ejecuciones
+
+Para consultar la evidencia verificable, trazabilidad y resultados de la habilitación del primer administrador global ejecutada en Supabase Producción el 28 de octubre de 2026, referirse al documento institucional:
+- [Informe Institucional de Ejecución: Habilitación del Primer Administrador Global](./informe-habilitacion-primer-admin-global.md)
