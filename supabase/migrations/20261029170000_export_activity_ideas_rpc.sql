@@ -13,9 +13,9 @@ set search_path = public, pg_temp
 as $$
 declare
   v_user_id uuid;
-  v_activity record;
-  v_ideas_json jsonb;
+  v_result jsonb;
   v_count integer;
+  v_total_count integer;
   v_limit constant integer := 5000;
 begin
   -- 1. Autenticación obligatoria
@@ -29,21 +29,22 @@ begin
     raise exception 'Alcance de exportación inválido' using errcode = '22023';
   end if;
 
-  -- 3. Verificación de existencia y titularidad de la actividad
-  -- Garantiza que solo la persona organizadora propietaria acceda a los datos de la actividad
-  select id, public_code, title, question, status, created_at
-  into v_activity
-  from public.activities
-  where id = target_activity_id
-    and owner_id = v_user_id;
-
-  if not found then
-    raise exception 'Actividad no encontrada o acceso no autorizado' using errcode = 'P0002';
-  end if;
-
-  -- 4. Conteo y recuperación de ideas en una única pasada MVCC (hasta 5.001 registros)
-  -- Excluye estrictamente cualquier dato personal (sin autores, emails ni participantes)
-  with candidate_ideas as (
+  -- 3. Lectura consistente bajo un único snapshot MVCC en una sola sentencia SQL
+  -- Vincula la verificación de titularidad y la recuperación ordenada de ideas en el
+  -- mismo instante transaccional de lectura (point-in-time snapshot).
+  with target_act as (
+    select
+      a.id,
+      a.public_code,
+      a.title,
+      a.question,
+      a.status,
+      a.created_at
+    from public.activities as a
+    where a.id = target_activity_id
+      and a.owner_id = v_user_id
+  ),
+  candidate_ideas as (
     select
       i.id,
       i.content,
@@ -51,54 +52,74 @@ begin
       i.created_at,
       i.published_at
     from public.ideas as i
-    where i.activity_id = target_activity_id
-      and (export_scope = 'all' or i.status = 'published')
+    inner join target_act as a on a.id = i.activity_id
+    where (export_scope = 'all' or i.status = 'published')
     order by i.created_at asc, i.id asc
     limit 5001
   )
   select
-    count(*),
-    coalesce(
-      jsonb_agg(
-        jsonb_build_object(
-          'id', id,
-          'content', content,
-          'status', status,
-          'created_at', created_at,
-          'published_at', published_at
+    case
+      -- Si la actividad no existe o pertenece a otro usuario
+      when not exists (select 1 from target_act) then null
+      else jsonb_build_object(
+        'activity', (
+          select jsonb_build_object(
+            'id', a.id,
+            'public_code', a.public_code,
+            'title', a.title,
+            'question', a.question,
+            'status', a.status,
+            'created_at', a.created_at
+          )
+          from target_act as a
+        ),
+        'ideas_count', (select count(*) from candidate_ideas),
+        'ideas', (
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object(
+                'id', c.id,
+                'content', c.content,
+                'status', c.status,
+                'created_at', c.created_at,
+                'published_at', c.published_at
+              )
+              order by c.created_at asc, c.id asc
+            ),
+            '[]'::jsonb
+          )
+          from candidate_ideas as c
         )
-      ),
-      '[]'::jsonb
-    )
-  into v_count, v_ideas_json
-  from candidate_ideas;
+      )
+    end
+  into v_result;
+
+  -- 4. Si la actividad no existe o el usuario no es el titular, denegar con P0002
+  if v_result is null then
+    raise exception 'Actividad no encontrada o acceso no autorizado' using errcode = 'P0002';
+  end if;
+
+  v_count := (v_result->>'ideas_count')::integer;
 
   -- 5. Control de desbordamiento de 5.000 ideas
   if v_count > v_limit then
-    -- Obtener conteo exacto de la colección completa si excede el límite
-    select count(*) into v_count
+    select count(*)
+    into v_total_count
     from public.ideas
     where activity_id = target_activity_id
       and (export_scope = 'all' or status = 'published');
 
     return jsonb_build_object(
       'error', 'payload_too_large',
-      'total', v_count,
+      'total', v_total_count,
       'limit', v_limit
     );
   end if;
 
-  -- 6. Retorno de snapshot atómico consistente
+  -- 6. Retorno de snapshot completo sin datos personales
   return jsonb_build_object(
-    'activity', jsonb_build_object(
-      'id', v_activity.id,
-      'public_code', v_activity.public_code,
-      'title', v_activity.title,
-      'question', v_activity.question,
-      'status', v_activity.status,
-      'created_at', v_activity.created_at
-    ),
-    'ideas', v_ideas_json,
+    'activity', v_result->'activity',
+    'ideas', v_result->'ideas',
     'total', v_count
   );
 end;

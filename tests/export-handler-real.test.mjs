@@ -92,6 +92,30 @@ function createMockSupabase({
   };
 }
 
+/**
+ * SUITE DE PRUEBAS DEL HANDLER DE EXPORTACIÓN (route.ts)
+ *
+ * ALCANCE Y GARANTÍAS DE ESTA SUITE:
+ * 1. Lo que SÍ verifican estos tests (Capa de API / Handler Next.js con mocks controlados):
+ *    - Validación estricta de parámetros HTTP (`format`, `scope`) mediante Zod.
+ *    - Verificación del estado de autenticación (`supabase.auth.getUser()`).
+ *    - Invocación exclusiva de la función RPC `export_activity_ideas` y ausencia absoluta
+ *      de consultas a tablas directas (`fromCalls.length === 0`).
+ *    - Validación del contrato de datos retornado por la RPC con `exportRpcResponseSchema`.
+ *    - Mapeo determinista de errores: 401 (auth), 404 (not found / ajena), 413 (desbordamiento > 5.000),
+ *      503 (RPC inexistente sin fallback), 500 (contrato o base de datos).
+ *    - Coherencia interna entre `total` y la cantidad de ideas recibidas.
+ *    - Conservación del orden determinista entregado por la RPC en los artefactos CSV y HTML.
+ *    - Configuración de cabeceras HTTP de seguridad y eliminación absoluta de PII.
+ *
+ * 2. Lo que REQUIERE una base de datos PostgreSQL real (No verificable mediante mocks JS en memoria):
+ *    - Aislamiento transaccional MVCC y consistencia atómica real bajo escrituras concurrentes intensivas.
+ *    - Ejecución física del ordenamiento `ORDER BY c.created_at ASC, c.id ASC` dentro del motor PostgreSQL
+ *      mediante la función agregadora `jsonb_agg(...)`.
+ *    - Límites de memoria física de `jsonb` y buffers TOAST de PostgreSQL para 5.000 registros.
+ *    - Ejecución de políticas RLS y privilegios de roles (`SECURITY DEFINER`, revocaciones a PUBLIC/anon).
+ */
+
 const defaultActivity = {
   id: "act-123",
   public_code: "TESTCODE",
@@ -227,6 +251,63 @@ test("ESC-02B: Exactamente 5.000 ideas permitidas -> 200 OK íntegro", async () 
   assert.ok(csv.includes("Idea número 5000"));
 });
 
+test("ESC-02C: Orden determinista preservado ante marcas de tiempo idénticas (desempate por id ASC)", async () => {
+  const sameTimestamp = "2026-10-29T10:00:00.000Z";
+  // Conjunto ordenado deterministamente por created_at e id ASC
+  const orderedIdeas = [
+    {
+      id: "idea-aaa-01",
+      content: "Primera idea por desempate id",
+      status: "published",
+      created_at: sameTimestamp,
+      published_at: sameTimestamp,
+    },
+    {
+      id: "idea-bbb-02",
+      content: "Segunda idea por desempate id",
+      status: "published",
+      created_at: sameTimestamp,
+      published_at: sameTimestamp,
+    },
+    {
+      id: "idea-ccc-03",
+      content: "Tercera idea por desempate id",
+      status: "published",
+      created_at: sameTimestamp,
+      published_at: sameTimestamp,
+    },
+  ];
+
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: {
+        activity: defaultActivity,
+        ideas: orderedIdeas,
+        total: 3,
+      },
+      error: null,
+    }),
+  });
+
+  const res = await GET(
+    new Request(
+      "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+    ),
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  const pos1 = csv.indexOf("Primera idea por desempate id");
+  const pos2 = csv.indexOf("Segunda idea por desempate id");
+  const pos3 = csv.indexOf("Tercera idea por desempate id");
+
+  assert.ok(pos1 !== -1 && pos2 !== -1 && pos3 !== -1);
+  assert.ok(pos1 < pos2, "La primera idea debe anteceder a la segunda");
+  assert.ok(pos2 < pos3, "La segunda idea debe anteceder a la tercera");
+});
+
 test("ESC-03: Desbordamiento de 5.000 ideas (>5.000) retorna HTTP 413 Payload Too Large", async () => {
   const supabase = createMockSupabase({
     rpcHandler: async () => ({
@@ -253,6 +334,77 @@ test("ESC-03: Desbordamiento de 5.000 ideas (>5.000) retorna HTTP 413 Payload To
   assert.equal(json.error, "payload_too_large");
   assert.equal(json.total, 5001);
   assert.equal(supabase.fromCalls.length, 0);
+});
+
+test("ESC-03B: Desbordamiento defensivo - total > 5.000 en contrato regular retorna HTTP 413", async () => {
+  // Simula que la RPC retornó total = 5005 pero sin el flag error: "payload_too_large"
+  // El handler route.ts debe atraparlo defensivamente
+  const fiveIdeas = Array.from({ length: 5 }, (_, i) => ({
+    id: `idea-${i + 1}`,
+    content: `Idea ${i + 1}`,
+    status: "published",
+    created_at: "2026-10-29T10:00:00Z",
+    published_at: "2026-10-29T10:00:00Z",
+  }));
+
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: {
+        activity: defaultActivity,
+        ideas: fiveIdeas,
+        total: 5005, // Supera MAX_EXPORT_LIMIT
+      },
+      error: null,
+    }),
+  });
+
+  const res = await GET(
+    new Request(
+      "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+    ),
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 413);
+  const json = await res.json();
+  assert.equal(json.error, "payload_too_large");
+  assert.equal(json.total, 5005);
+});
+
+test("ESC-03C: Desbordamiento defensivo - ideas.length > 5.000 en contrato regular retorna HTTP 413", async () => {
+  // Simula que la lista de ideas contiene 5.001 elementos
+  const overLimitIdeas = Array.from({ length: 5001 }, (_, i) => ({
+    id: `idea-${i + 1}`,
+    content: `Idea ${i + 1}`,
+    status: "published",
+    created_at: "2026-10-29T10:00:00Z",
+    published_at: "2026-10-29T10:00:00Z",
+  }));
+
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: {
+        activity: defaultActivity,
+        ideas: overLimitIdeas,
+        total: 5001,
+      },
+      error: null,
+    }),
+  });
+
+  const res = await GET(
+    new Request(
+      "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+    ),
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 413);
+  const json = await res.json();
+  assert.equal(json.error, "payload_too_large");
+  assert.equal(json.total, 5001);
 });
 
 test("ESC-04: Usuario no autenticado (sin sesión Supabase) retorna HTTP 401 sin invocar RPC", async () => {
