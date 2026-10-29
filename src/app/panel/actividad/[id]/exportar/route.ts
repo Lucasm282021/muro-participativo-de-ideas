@@ -1,7 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { generateCsv } from "@/lib/export/csv";
 import { generateHtmlSlideDeck } from "@/lib/export/html";
-import { exportQuerySchema } from "@/lib/export/schemas";
+import {
+  BATCH_SIZE,
+  MAX_EXPORT_LIMIT,
+  exportQuerySchema,
+} from "@/lib/export/schemas";
 import { createClient } from "@/lib/supabase/server";
 import type { ExportableActivity } from "@/lib/export/html";
 import type { ExportableIdea } from "@/lib/export/csv";
@@ -11,6 +15,7 @@ export const dynamic = "force-dynamic";
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
+  injectedSupabase?: any,
 ) {
   const { id } = await params;
 
@@ -34,11 +39,10 @@ export async function GET(
 
   const { format, scope } = parseResult.data;
 
-  // 2. Autenticación con sesión Supabase
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // 2. Autenticación con sesión Supabase (permite injectedSupabase para testing controlado del handler)
+  const supabase = injectedSupabase ?? (await createClient());
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user;
 
   if (!user) {
     return new NextResponse(null, { status: 401 });
@@ -59,9 +63,7 @@ export async function GET(
 
   const activity = rawActivity as ExportableActivity;
 
-  // 4. Límite de volumen y comprobación de desbordamiento (tope 5.000 ideas)
-  const MAX_EXPORT_LIMIT = 5000;
-
+  // 4. Conteo inicial y control de desbordamiento (tope 5.000 ideas)
   let countQuery = supabase
     .from("ideas")
     .select("id", { count: "exact", head: true })
@@ -71,7 +73,7 @@ export async function GET(
     countQuery = countQuery.eq("status", "published");
   }
 
-  const { count: totalIdeas, error: countError } = await countQuery;
+  const { count: initialCount, error: countError } = await countQuery;
   if (countError) {
     return NextResponse.json(
       { error: "database_error", message: "Error al consultar las ideas." },
@@ -79,52 +81,106 @@ export async function GET(
     );
   }
 
-  if ((totalIdeas ?? 0) > MAX_EXPORT_LIMIT) {
+  const expectedCount = initialCount ?? 0;
+
+  if (expectedCount > MAX_EXPORT_LIMIT) {
     return NextResponse.json(
       {
         error: "payload_too_large",
         message: `La actividad excede el límite máximo de ${MAX_EXPORT_LIMIT.toLocaleString("es-AR")} ideas para exportación directa.`,
-        total: totalIdeas,
+        total: expectedCount,
       },
       { status: 413 },
     );
   }
 
-  // 5. Consulta de ideas autorizadas (sin JOIN con participants ni idea_authors)
-  let ideasQuery = supabase
-    .from("ideas")
-    .select("id, content, status, created_at, published_at")
-    .eq("activity_id", id)
-    .order("created_at", { ascending: true })
-    .range(0, MAX_EXPORT_LIMIT - 1);
+  // 5. Paginación en bloques (BATCH_SIZE = 1000) respetando el límite por consulta de PostgREST
+  const allIdeas: ExportableIdea[] = [];
+  let fromOffset = 0;
 
-  if (scope === "published") {
-    ideasQuery = ideasQuery.eq("status", "published");
+  while (fromOffset < expectedCount) {
+    const toOffset = Math.min(fromOffset + BATCH_SIZE - 1, expectedCount - 1);
+
+    let batchQuery = supabase
+      .from("ideas")
+      .select("id, content, status, created_at, published_at")
+      .eq("activity_id", id);
+
+    if (scope === "published") {
+      batchQuery = batchQuery.eq("status", "published");
+    }
+
+    const { data: batchData, error: batchError } = await batchQuery
+      .order("created_at", { ascending: true })
+      .range(fromOffset, toOffset);
+
+    if (batchError) {
+      return NextResponse.json(
+        { error: "database_error", message: "Error al recuperar las ideas." },
+        { status: 500 },
+      );
+    }
+
+    const batch = (batchData ?? []) as ExportableIdea[];
+    if (batch.length === 0) {
+      // Discrepancia: la base devolvió 0 filas antes de alcanzar expectedCount
+      break;
+    }
+
+    allIdeas.push(...batch);
+    fromOffset += batch.length;
   }
 
-  const { data: rawIdeas, error: ideasError } = await ideasQuery;
-  if (ideasError) {
+  // 6. Verificación de integridad y consistencia
+  // Comprobar que no haya truncamiento ni carreras de concurrencia
+  if (allIdeas.length !== expectedCount) {
+    let verifyQuery = supabase
+      .from("ideas")
+      .select("id", { count: "exact", head: true })
+      .eq("activity_id", id);
+
+    if (scope === "published") {
+      verifyQuery = verifyQuery.eq("status", "published");
+    }
+
+    const { count: recount } = await verifyQuery;
+    if ((recount ?? 0) > MAX_EXPORT_LIMIT) {
+      return NextResponse.json(
+        {
+          error: "payload_too_large",
+          message: `La actividad excede el límite máximo de ${MAX_EXPORT_LIMIT.toLocaleString("es-AR")} ideas para exportación directa.`,
+          total: recount,
+        },
+        { status: 413 },
+      );
+    }
+
+    // Si la cantidad recuperada no coincide con el conteo esperado, nunca devolver 200 incompleto
     return NextResponse.json(
-      { error: "database_error", message: "Error al recuperar las ideas." },
-      { status: 500 },
+      {
+        error: "export_inconsistency",
+        message:
+          "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes o discrepancia en el conteo. Por favor, reintentá la descarga.",
+        expected: expectedCount,
+        retrieved: allIdeas.length,
+      },
+      { status: 409 },
     );
   }
 
-  const ideas = (rawIdeas ?? []) as ExportableIdea[];
-
-  // 6. Generación de contenido según formato
+  // 7. Generación de contenido según formato
   let fileContent: string;
   let contentType: string;
 
   if (format === "csv") {
-    fileContent = generateCsv(ideas, scope);
+    fileContent = generateCsv(allIdeas, scope);
     contentType = "text/csv; charset=utf-8";
   } else {
-    fileContent = generateHtmlSlideDeck(activity, ideas, scope);
+    fileContent = generateHtmlSlideDeck(activity, allIdeas, scope);
     contentType = "text/html; charset=utf-8";
   }
 
-  // 7. Construcción de nombre de archivo seguro
+  // 8. Construcción de nombre de archivo seguro
   const safeCode = (activity.public_code || "actividad").replace(
     /[^a-zA-Z0-9_-]/g,
     "",
@@ -142,4 +198,3 @@ export async function GET(
     },
   });
 }
-
