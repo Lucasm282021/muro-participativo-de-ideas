@@ -117,6 +117,7 @@ function createMockSupabase({
         let isCountHead = false;
         let filterActivityId = null;
         let filterStatus = null;
+        let cursorFilter = null;
         const orderings = [];
         let rangeFrom = 0;
         let rangeTo = Infinity;
@@ -133,6 +134,19 @@ function createMockSupabase({
             if (column === "status") filterStatus = val;
             return ideasQuery;
           },
+          or: (filterStr) => {
+            const gtMatch = filterStr.match(/created_at\.gt\.([^,]+)/);
+            const eqMatch = filterStr.match(/created_at\.eq\.([^,]+)/);
+            const idGtMatch = filterStr.match(/id\.gt\.([^)]+)/);
+            if (gtMatch && eqMatch && idGtMatch) {
+              cursorFilter = {
+                created_at_gt: gtMatch[1],
+                created_at_eq: eqMatch[1],
+                id_gt: idGtMatch[1],
+              };
+            }
+            return ideasQuery;
+          },
           order: (col, opts = {}) => {
             orderings.push({ col, ascending: opts.ascending !== false });
             return ideasQuery;
@@ -141,7 +155,7 @@ function createMockSupabase({
             rangeFrom = from;
             rangeTo = to;
             if (onRangeCalled) {
-              onRangeCalled(from, to);
+              onRangeCalled(from, to, batchCallCount + 1);
             }
             return ideasQuery;
           },
@@ -203,6 +217,15 @@ function createMockSupabase({
               if (filterActivityId && i.activity_id !== filterActivityId)
                 return false;
               if (filterStatus && i.status !== filterStatus) return false;
+              if (cursorFilter) {
+                if (i.created_at > cursorFilter.created_at_gt) return true;
+                if (
+                  i.created_at === cursorFilter.created_at_eq &&
+                  i.id > cursorFilter.id_gt
+                )
+                  return true;
+                return false;
+              }
               return true;
             });
 
@@ -384,7 +407,7 @@ test("H1-03A: Exactamente 5.000 registros permitidos -> 200 OK con 5 bloques com
 
   assert.equal(res.status, 200);
   assert.equal(ranges.length, 5, "Debe ejecutar exactamente 5 lotes de 1.000");
-  assert.deepEqual(ranges[4], { from: 4000, to: 4999 });
+  assert.deepEqual(ranges[4], { from: 0, to: 999 });
 });
 
 test("H1-03B: Más de 5.000 registros (5.001) -> 413 Payload Too Large sin generar archivo parcial", async () => {
@@ -800,4 +823,178 @@ test("H1-12: Autorización 401/404, validación 400, alcance published/all y cab
   const csv = await res200.text();
   assert.ok(!csv.toLowerCase().includes("email"));
   assert.ok(!csv.toLowerCase().includes("organizer@test.com"));
+});
+
+// ============================================================================
+// 13. PRUEBAS ADVERSARIALES DE INTEGRIDAD CONCURRENTE (ORDEN 2)
+// ============================================================================
+
+test("H1-ADV-01: Caso adversarial: eliminación de idea leída e inserción concurrente al final (2.500 ideas) -> 409 Conflict", async () => {
+  // 1. Conteo inicial de 2.500 ideas con timestamp de corte base
+  const baseTime = "2026-10-29T10:00:00.000Z";
+  const ideasList = Array.from({ length: 2500 }, (_, i) => ({
+    id: `idea-${String(i + 1).padStart(5, "0")}`,
+    activity_id: "act-123",
+    content: `Idea número ${i + 1}`,
+    status: "published",
+    created_at: baseTime,
+    published_at: baseTime,
+  }));
+
+  // Array mutable que simula el estado vivo de la tabla en base de datos
+  const liveIdeas = [...ideasList];
+
+  const supabase = createMockSupabase({
+    ideas: liveIdeas,
+    onRangeCalled: (_from, _to, batchNum) => {
+      // 2. Al leer el segundo lote (tras haber recuperado el lote 1 con idea-00050),
+      // se simula la mutación concurrente compensada:
+      // 3. Se elimina la idea leída 'idea-00050' y se inserta una nueva 'idea-02501' al final
+      if (batchNum === 2) {
+        const deletedIndex = liveIdeas.findIndex((i) => i.id === "idea-00050");
+        if (deletedIndex !== -1) {
+          liveIdeas.splice(deletedIndex, 1);
+        }
+        liveIdeas.push({
+          id: "idea-02501",
+          activity_id: "act-123",
+          content: "Idea insertada concurrentemente al final de la actividad",
+          status: "published",
+          created_at: baseTime,
+          published_at: baseTime,
+        });
+        // La cardinalidad total en base de datos sigue siendo exactamente 2.500
+      }
+    },
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  // 4. Verificación estricta: NO debe responder 200 con la idea eliminada y la idea viva omitida
+  assert.notEqual(
+    res.status,
+    200,
+    "No debe responder 200 ante una carrera concurrente compensada",
+  );
+  assert.equal(
+    res.status,
+    409,
+    "Debe responder 409 Conflict al detectar la discrepancia entre el conjunto inicial y vivo",
+  );
+  const json = await res.json();
+  assert.equal(json.error, "export_inconsistency");
+});
+
+test("H1-ADV-02: Inserción concurrente cuando el conteo inicial es cero -> 409 Conflict", async () => {
+  const liveIdeas = [
+    {
+      id: "idea-primera",
+      activity_id: "act-123",
+      content: "Idea enviada mientras la actividad estaba vacía",
+      status: "published",
+      created_at: "2026-10-29T10:01:00.000Z",
+      published_at: "2026-10-29T10:01:00.000Z",
+    },
+  ];
+
+  // Simula que el conteo inicial leyó 0 ideas, pero antes de finalizar la verificación
+  // la base de datos pasó a tener 1 idea por inserción concurrente
+  const supabase = createMockSupabase({
+    ideas: liveIdeas,
+    initialCountOverride: 0,
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(
+    res.status,
+    409,
+    "Debe responder 409 Conflict si se inserta una idea concurrente con conteo inicial cero",
+  );
+  const json = await res.json();
+  assert.equal(json.error, "export_inconsistency");
+});
+
+test("H1-ADV-03: Colección vacía legítima (sin ideas iniciales ni concurrentes) -> 200 OK", async () => {
+  const emptySupabase = createMockSupabase({ ideas: [] });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    emptySupabase,
+  );
+
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  assert.ok(csv.includes("Fecha de publicación"));
+});
+
+test("H1-ADV-04: Alcance all con mock que contiene datos personales -> omisión total de PII", async () => {
+  const ideasWithPii = [
+    {
+      id: "idea-0001",
+      activity_id: "act-123",
+      content: "Propuesta aprobada en el muro",
+      status: "published",
+      created_at: "2026-10-29T10:00:00Z",
+      published_at: "2026-10-29T10:00:00Z",
+      first_name: "Juan",
+      last_name: "Pérez",
+      email: "juan.perez@privado.com",
+      author_id: "user-private-uuid-999",
+    },
+    {
+      id: "idea-0002",
+      activity_id: "act-123",
+      content: "Propuesta pendiente de revisión",
+      status: "pending",
+      created_at: "2026-10-29T10:01:00Z",
+      published_at: null,
+      first_name: "María",
+      last_name: "Gómez",
+      email: "maria.gomez@confidencial.com",
+      author_id: "user-private-uuid-888",
+    },
+  ];
+
+  const supabase = createMockSupabase({ ideas: ideasWithPii });
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv&scope=all",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  assert.ok(!csv.includes("juan.perez@privado.com"), "No debe exponer email");
+  assert.ok(
+    !csv.includes("maria.gomez@confidencial.com"),
+    "No debe exponer email",
+  );
+  assert.ok(!csv.includes("Pérez"), "No debe exponer apellido");
+  assert.ok(!csv.includes("Gómez"), "No debe exponer apellido");
+  assert.ok(
+    !csv.includes("user-private-uuid"),
+    "No debe exponer UUIDs de autores",
+  );
 });

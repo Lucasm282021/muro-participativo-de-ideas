@@ -98,15 +98,15 @@ export async function GET(
     );
   }
 
-  // 5. Paginación en bloques (BATCH_SIZE = 1000) con orden determinista (created_at ASC, id ASC)
+  // 5. Paginación por cursor determinista (keyset pagination)
+  // Ancla cada lote al último par (created_at, id) para evitar corrimientos por offset ante mutaciones
   const allIdeas: ExportableIdea[] = [];
   const seenIds = new Set<string>();
   let hasDuplicates = false;
-  let fromOffset = 0;
+  let lastCursor: { created_at: string; id: string } | null = null;
+  let hasMore = expectedCount > 0;
 
-  while (fromOffset < expectedCount) {
-    const toOffset = Math.min(fromOffset + BATCH_SIZE - 1, expectedCount - 1);
-
+  while (hasMore) {
     let batchQuery = supabase
       .from("ideas")
       .select("id, content, status, created_at, published_at")
@@ -116,10 +116,16 @@ export async function GET(
       batchQuery = batchQuery.eq("status", "published");
     }
 
+    if (lastCursor) {
+      batchQuery = batchQuery.or(
+        `created_at.gt.${lastCursor.created_at},and(created_at.eq.${lastCursor.created_at},id.gt.${lastCursor.id})`,
+      );
+    }
+
     const { data: batchData, error: batchError } = await batchQuery
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
-      .range(fromOffset, toOffset);
+      .range(0, BATCH_SIZE - 1);
 
     if (batchError) {
       return NextResponse.json(
@@ -130,7 +136,6 @@ export async function GET(
 
     const batch = (batchData ?? []) as ExportableIdea[];
     if (batch.length === 0) {
-      // Discrepancia: la base devolvió 0 filas antes de alcanzar expectedCount
       break;
     }
 
@@ -143,61 +148,64 @@ export async function GET(
       allIdeas.push(idea);
     }
 
-    fromOffset += batch.length;
+    if (batch.length < BATCH_SIZE || allIdeas.length >= expectedCount) {
+      hasMore = false;
+    } else {
+      const lastIdea = batch[batch.length - 1];
+      lastCursor = { created_at: lastIdea.created_at, id: lastIdea.id };
+    }
   }
 
   // 6. Verificación de integridad, reconteo y detección de inconsistencias concurrentes
-  if (expectedCount > 0) {
-    let verifyQuery = supabase
-      .from("ideas")
-      .select("id", { count: "exact", head: true })
-      .eq("activity_id", id);
+  let verifyQuery = supabase
+    .from("ideas")
+    .select("id", { count: "exact", head: true })
+    .eq("activity_id", id);
 
-    if (scope === "published") {
-      verifyQuery = verifyQuery.eq("status", "published");
-    }
+  if (scope === "published") {
+    verifyQuery = verifyQuery.eq("status", "published");
+  }
 
-    const { count: recount, error: recountError } = await verifyQuery;
-    if (recountError || typeof recount !== "number") {
-      return NextResponse.json(
-        {
-          error: "database_error",
-          message: "Error al verificar el conteo final de ideas.",
-        },
-        { status: 500 },
-      );
-    }
+  const { count: recount, error: recountError } = await verifyQuery;
+  if (recountError || typeof recount !== "number") {
+    return NextResponse.json(
+      {
+        error: "database_error",
+        message: "Error al verificar el conteo final de ideas.",
+      },
+      { status: 500 },
+    );
+  }
 
-    if (recount > MAX_EXPORT_LIMIT) {
-      return NextResponse.json(
-        {
-          error: "payload_too_large",
-          message: `La actividad excede el límite máximo de ${MAX_EXPORT_LIMIT.toLocaleString("es-AR")} ideas para exportación directa.`,
-          total: recount,
-        },
-        { status: 413 },
-      );
-    }
+  if (recount > MAX_EXPORT_LIMIT) {
+    return NextResponse.json(
+      {
+        error: "payload_too_large",
+        message: `La actividad excede el límite máximo de ${MAX_EXPORT_LIMIT.toLocaleString("es-AR")} ideas para exportación directa.`,
+        total: recount,
+      },
+      { status: 413 },
+    );
+  }
 
-    if (
-      hasDuplicates ||
-      seenIds.size !== allIdeas.length ||
-      allIdeas.length !== expectedCount ||
-      recount !== expectedCount ||
-      allIdeas.length !== recount
-    ) {
-      return NextResponse.json(
-        {
-          error: "export_inconsistency",
-          message:
-            "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes o discrepancia en los registros. Por favor, reintentá la descarga.",
-          expected: expectedCount,
-          retrieved: allIdeas.length,
-          recount,
-        },
-        { status: 409 },
-      );
-    }
+  if (
+    hasDuplicates ||
+    seenIds.size !== allIdeas.length ||
+    allIdeas.length !== expectedCount ||
+    recount !== expectedCount ||
+    allIdeas.length !== recount
+  ) {
+    return NextResponse.json(
+      {
+        error: "export_inconsistency",
+        message:
+          "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes o discrepancia en los registros. Por favor, reintentá la descarga.",
+        expected: expectedCount,
+        retrieved: allIdeas.length,
+        recount,
+      },
+      { status: 409 },
+    );
   }
 
   // 7. Generación de contenido según formato
