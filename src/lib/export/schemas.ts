@@ -31,8 +31,8 @@ export type ExportSupabaseClient =
 export const exportRpcResponseSchema = z.union([
   z.object({
     error: z.literal("payload_too_large"),
-    total: z.number(),
-    limit: z.number().optional(),
+    total: z.number().int().nonnegative(),
+    limit: z.number().int().positive().optional(),
   }),
   z.object({
     error: z.undefined().optional(),
@@ -41,7 +41,7 @@ export const exportRpcResponseSchema = z.union([
       public_code: z.string(),
       title: z.string(),
       question: z.string(),
-      status: z.string(),
+      status: z.enum(["draft", "open", "closed"]),
       created_at: z.string(),
     }),
     ideas: z.array(
@@ -53,7 +53,7 @@ export const exportRpcResponseSchema = z.union([
         published_at: z.string().nullable(),
       }),
     ),
-    total: z.number(),
+    total: z.number().int().nonnegative(),
   }),
 ]);
 

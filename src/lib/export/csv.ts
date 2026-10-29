@@ -26,14 +26,13 @@ export function sanitizeCsvField(
   let str = String(value);
 
   // Protección reforzada contra CSV Injection (DDE):
-  // Detecta disparadores peligrosos (=, +, -, @, \t, \r) de forma directa
-  // o si van precedidos por espacios en blanco / espacios no separables
-  const formulaTriggers = ["=", "+", "-", "@", "\t", "\r"];
-  const isDirect = formulaTriggers.some((t) => str.startsWith(t));
-  const trimmed = str.replace(/^[ \u00A0]+/, "");
-  const isTrimmedTrigger = formulaTriggers.some((t) => trimmed.startsWith(t));
+  // Neutraliza disparadores peligrosos (=, +, -, @, \t, \r) de forma directa
+  // o si van precedidos por espacios en blanco horizontales o verticales,
+  // espacios no separables y espacios Unicode.
+  const formulaRegex =
+    /^[\s\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]*[=+\-@\t\r]/;
 
-  if (isDirect || isTrimmedTrigger) {
+  if (formulaRegex.test(str)) {
     str = `'${str}`;
   }
 

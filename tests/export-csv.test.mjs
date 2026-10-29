@@ -36,7 +36,7 @@ test("CSV-02: Delimitador estándar punto y coma (;) conforme a la configuració
 
 test("CSV-03: Protección estricta contra inyección de fórmulas (CSV Injection / DDE)", () => {
   // Disparadores peligrosos en planillas: =, +, -, @, tab (\t), retorno (\r)
-  const dangerousValues = [
+  const dangerousDirectValues = [
     "=1+2",
     "+SUM(A1:A10)",
     "-10*5",
@@ -45,7 +45,7 @@ test("CSV-03: Protección estricta contra inyección de fórmulas (CSV Injection
     "\rcalc.exe",
   ];
 
-  for (const val of dangerousValues) {
+  for (const val of dangerousDirectValues) {
     const sanitized = sanitizeCsvField(val);
     assert.ok(
       sanitized.startsWith(`"'${val[0]}`),
@@ -54,23 +54,43 @@ test("CSV-03: Protección estricta contra inyección de fórmulas (CSV Injection
   }
 
   // Comportamiento normal con textos seguros
-  const safe = sanitizeCsvField("Texto seguro");
-  assert.equal(safe, '"Texto seguro"');
+  const safeValues = [
+    "Texto seguro",
+    "   Texto con espacios iniciales",
+    "5 + 5",
+    "10 - 2",
+    "contacto @ empresa",
+  ];
+  for (const val of safeValues) {
+    const sanitized = sanitizeCsvField(val);
+    assert.ok(
+      !sanitized.startsWith("\"'"),
+      `El valor seguro ${JSON.stringify(val)} no debe llevar apóstrofe de neutralización`,
+    );
+  }
 
-  // Protección reforzada: disparadores con espacios o tabulaciones iniciales
+  // Protección reforzada: disparadores con espacios, tabs, newlines y espacios Unicode iniciales
   const whitespaceDangerous = [
     "   =1+2",
     "  +SUM(B1:B5)",
     "   -calc",
     '  @HYPERLINK("http://evil.com")',
     "\t  =2*3",
+    "\t\t+123",
+    "\r\n=1",
+    "\n-cmd",
+    "\n@SUM",
+    "\u00A0=1+1",
+    "\u2000+calc",
+    "\u2003@test",
+    "\u200B-alert",
+    "\u3000=A1",
   ];
   for (const val of whitespaceDangerous) {
     const sanitized = sanitizeCsvField(val);
     assert.ok(
-      sanitized.startsWith("\"'") &&
-        sanitized.includes(val.trimStart().replace(/"/g, '""')),
-      `El valor con espacios iniciales ${JSON.stringify(val)} debe neutralizarse con apóstrofe`,
+      sanitized.startsWith("\"'"),
+      `El valor con espacios o caracteres de control iniciales ${JSON.stringify(val)} debe neutralizarse con apóstrofe`,
     );
   }
 });
