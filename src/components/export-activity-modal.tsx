@@ -127,13 +127,27 @@ function ExportActivityModal({
           return;
         }
 
-        if (response.status === 404) {
-          setError("No se encontró la actividad o no tenés permisos para exportarla.");
+        if (response.status === 409) {
+          const body = await response.json().catch(() => null);
+          setError(
+            body?.message ??
+              "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes. Por favor, reintentá la descarga.",
+          );
           setLoading(false);
           return;
         }
 
-        setError("Ocurrió un error al generar la exportación. Intentalo de nuevo.");
+        if (response.status === 404) {
+          setError(
+            "No se encontró la actividad o no tenés permisos para exportarla.",
+          );
+          setLoading(false);
+          return;
+        }
+
+        setError(
+          "Ocurrió un error al generar la exportación. Intentalo de nuevo.",
+        );
         setLoading(false);
         return;
       }
@@ -162,7 +176,9 @@ function ExportActivityModal({
       setLoading(false);
       onClose();
     } catch {
-      setError("Error de conexión al descargar. Verificá tu red y probá nuevamente.");
+      setError(
+        "Error de conexión al descargar. Verificá tu red y probá nuevamente.",
+      );
       setLoading(false);
     }
   };
@@ -212,7 +228,9 @@ function ExportActivityModal({
                 <div>
                   <strong>CSV (.csv) — Planilla de cálculo</strong>
                   <p>
-                    Compatible con Excel y Google Sheets. Delimitado por punto y coma (;) con codificación UTF-8 y protección contra fórmulas.
+                    Compatible con Excel y Google Sheets. Delimitado por punto y
+                    coma (;) con codificación UTF-8 y protección contra
+                    fórmulas.
                   </p>
                 </div>
               </label>
@@ -228,7 +246,9 @@ function ExportActivityModal({
                 <div>
                   <strong>HTML (.html) — Presentación de diapositivas</strong>
                   <p>
-                    Documento autocontenido con navegación por teclado y controles. Funciona sin conexión a internet y se adapta a la extensión de las ideas.
+                    Documento autocontenido con navegación por teclado y
+                    controles. Funciona sin conexión a internet y se adapta a la
+                    extensión de las ideas.
                   </p>
                 </div>
               </label>
@@ -248,7 +268,9 @@ function ExportActivityModal({
                 <strong>Incluir ideas pendientes y ocultas</strong>
                 <br />
                 <span style={{ fontSize: "12px", color: "#666" }}>
-                  Por defecto solo se exportan las ideas publicadas en el muro. Al marcar esta opción, cada idea identificará explícitamente su estado.
+                  Por defecto solo se exportan las ideas publicadas en el muro.
+                  Al marcar esta opción, cada idea identificará explícitamente
+                  su estado.
                 </span>
               </span>
             </label>
@@ -257,7 +279,9 @@ function ExportActivityModal({
           <div className="export-privacy-notice" role="note">
             <span>🔒</span>
             <p>
-              <strong>Privacidad garantizada:</strong> Los nombres, direcciones de correo electrónico y datos personales de los participantes nunca se incluyen en los archivos exportados.
+              <strong>Privacidad garantizada:</strong> Los nombres, direcciones
+              de correo electrónico y datos personales de los participantes
+              nunca se incluyen en los archivos exportados.
             </p>
           </div>
 
@@ -293,4 +317,3 @@ function ExportActivityModal({
     document.body,
   );
 }
-

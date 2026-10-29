@@ -1,21 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server";
+import type { ExportableIdea } from "@/lib/export/csv";
 import { generateCsv } from "@/lib/export/csv";
+import type { ExportableActivity } from "@/lib/export/html";
 import { generateHtmlSlideDeck } from "@/lib/export/html";
 import {
   BATCH_SIZE,
-  MAX_EXPORT_LIMIT,
+  type ExportSupabaseClient,
   exportQuerySchema,
+  MAX_EXPORT_LIMIT,
 } from "@/lib/export/schemas";
 import { createClient } from "@/lib/supabase/server";
-import type { ExportableActivity } from "@/lib/export/html";
-import type { ExportableIdea } from "@/lib/export/csv";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
-  injectedSupabase?: any,
+  injectedSupabase?: ExportSupabaseClient,
 ) {
   const { id } = await params;
 
@@ -39,7 +40,7 @@ export async function GET(
 
   const { format, scope } = parseResult.data;
 
-  // 2. Autenticación con sesión Supabase (permite injectedSupabase para testing controlado del handler)
+  // 2. Autenticación con sesión Supabase (permite injectedSupabase tipado para testing controlado)
   const supabase = injectedSupabase ?? (await createClient());
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
@@ -74,14 +75,17 @@ export async function GET(
   }
 
   const { count: initialCount, error: countError } = await countQuery;
-  if (countError) {
+  if (countError || typeof initialCount !== "number") {
     return NextResponse.json(
-      { error: "database_error", message: "Error al consultar las ideas." },
+      {
+        error: "database_error",
+        message: "Error al consultar el conteo de ideas.",
+      },
       { status: 500 },
     );
   }
 
-  const expectedCount = initialCount ?? 0;
+  const expectedCount = initialCount;
 
   if (expectedCount > MAX_EXPORT_LIMIT) {
     return NextResponse.json(
@@ -94,8 +98,10 @@ export async function GET(
     );
   }
 
-  // 5. Paginación en bloques (BATCH_SIZE = 1000) respetando el límite por consulta de PostgREST
+  // 5. Paginación en bloques (BATCH_SIZE = 1000) con orden determinista (created_at ASC, id ASC)
   const allIdeas: ExportableIdea[] = [];
+  const seenIds = new Set<string>();
+  let hasDuplicates = false;
   let fromOffset = 0;
 
   while (fromOffset < expectedCount) {
@@ -112,6 +118,7 @@ export async function GET(
 
     const { data: batchData, error: batchError } = await batchQuery
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(fromOffset, toOffset);
 
     if (batchError) {
@@ -127,13 +134,20 @@ export async function GET(
       break;
     }
 
-    allIdeas.push(...batch);
+    for (const idea of batch) {
+      if (seenIds.has(idea.id)) {
+        hasDuplicates = true;
+      } else {
+        seenIds.add(idea.id);
+      }
+      allIdeas.push(idea);
+    }
+
     fromOffset += batch.length;
   }
 
-  // 6. Verificación de integridad y consistencia
-  // Comprobar que no haya truncamiento ni carreras de concurrencia
-  if (allIdeas.length !== expectedCount) {
+  // 6. Verificación de integridad, reconteo y detección de inconsistencias concurrentes
+  if (expectedCount > 0) {
     let verifyQuery = supabase
       .from("ideas")
       .select("id", { count: "exact", head: true })
@@ -143,8 +157,18 @@ export async function GET(
       verifyQuery = verifyQuery.eq("status", "published");
     }
 
-    const { count: recount } = await verifyQuery;
-    if ((recount ?? 0) > MAX_EXPORT_LIMIT) {
+    const { count: recount, error: recountError } = await verifyQuery;
+    if (recountError || typeof recount !== "number") {
+      return NextResponse.json(
+        {
+          error: "database_error",
+          message: "Error al verificar el conteo final de ideas.",
+        },
+        { status: 500 },
+      );
+    }
+
+    if (recount > MAX_EXPORT_LIMIT) {
       return NextResponse.json(
         {
           error: "payload_too_large",
@@ -155,17 +179,25 @@ export async function GET(
       );
     }
 
-    // Si la cantidad recuperada no coincide con el conteo esperado, nunca devolver 200 incompleto
-    return NextResponse.json(
-      {
-        error: "export_inconsistency",
-        message:
-          "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes o discrepancia en el conteo. Por favor, reintentá la descarga.",
-        expected: expectedCount,
-        retrieved: allIdeas.length,
-      },
-      { status: 409 },
-    );
+    if (
+      hasDuplicates ||
+      seenIds.size !== allIdeas.length ||
+      allIdeas.length !== expectedCount ||
+      recount !== expectedCount ||
+      allIdeas.length !== recount
+    ) {
+      return NextResponse.json(
+        {
+          error: "export_inconsistency",
+          message:
+            "No se pudo garantizar la integridad completa de la exportación debido a cambios concurrentes o discrepancia en los registros. Por favor, reintentá la descarga.",
+          expected: expectedCount,
+          retrieved: allIdeas.length,
+          recount,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // 7. Generación de contenido según formato
