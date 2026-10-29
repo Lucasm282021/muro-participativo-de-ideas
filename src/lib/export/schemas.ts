@@ -24,4 +24,37 @@ export type ExportSupabaseClient =
       };
       // biome-ignore lint/suspicious/noExplicitAny: Permite clientes mock en tests unitarios e integración
       from: (table: string) => any;
+      // biome-ignore lint/suspicious/noExplicitAny: Permite invocar RPC atómico en tests e integración
+      rpc?: (fn: string, params?: Record<string, unknown>) => any;
     };
+
+export const exportRpcResponseSchema = z.union([
+  z.object({
+    error: z.literal("payload_too_large"),
+    total: z.number(),
+    limit: z.number().optional(),
+  }),
+  z.object({
+    error: z.undefined().optional(),
+    activity: z.object({
+      id: z.string(),
+      public_code: z.string(),
+      title: z.string(),
+      question: z.string(),
+      status: z.string(),
+      created_at: z.string(),
+    }),
+    ideas: z.array(
+      z.object({
+        id: z.string(),
+        content: z.string(),
+        status: z.enum(["pending", "published", "hidden"]),
+        created_at: z.string(),
+        published_at: z.string().nullable(),
+      }),
+    ),
+    total: z.number(),
+  }),
+]);
+
+export type ExportRpcResponse = z.infer<typeof exportRpcResponseSchema>;

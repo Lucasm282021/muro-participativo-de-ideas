@@ -76,11 +76,21 @@ function createMockSupabase({
   compensatingDuplicateShift = false,
   prematureEmptyBatch = false,
   onRangeCalled = null,
+  rpcHandler = null,
 } = {}) {
   let countCallCount = 0;
   let batchCallCount = 0;
 
   return {
+    rpc:
+      rpcHandler ??
+      (async () => ({
+        data: null,
+        error: {
+          code: "42883",
+          message: "function export_activity_ideas does not exist",
+        },
+      })),
     auth: {
       getUser: async () => ({
         data: { user: currentUser },
@@ -997,4 +1007,177 @@ test("H1-ADV-04: Alcance all con mock que contiene datos personales -> omisión 
     !csv.includes("user-private-uuid"),
     "No debe exponer UUIDs de autores",
   );
+});
+
+// ============================================================================
+// 14. PRUEBAS DE CONTRATO RPC Y ADAPTACIÓN ATÓMICA (ORDEN 3)
+// ============================================================================
+
+test("RPC-01: Contrato RPC - Actividad vacía (0 ideas) retorna snapshot atómico 200 OK", async () => {
+  const supabase = createMockSupabase({
+    rpcHandler: async (fn, params) => {
+      assert.equal(fn, "export_activity_ideas");
+      assert.equal(params.target_activity_id, "act-123");
+      assert.equal(params.export_scope, "published");
+      return {
+        data: {
+          activity: {
+            id: "act-123",
+            public_code: "TESTCODE",
+            title: "Actividad Vacía",
+            question: "¿Ideas?",
+            status: "open",
+            created_at: "2026-10-29T10:00:00Z",
+          },
+          ideas: [],
+          total: 0,
+        },
+        error: null,
+      };
+    },
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  assert.ok(csv.includes("Fecha de publicación"));
+});
+
+test("RPC-02: Contrato RPC - Exactamente 5.000 ideas retorna snapshot 200 OK íntegro", async () => {
+  const fiveThousand = Array.from({ length: 5000 }, (_, i) => ({
+    id: `rpc-idea-${i + 1}`,
+    content: `Idea atómica ${i + 1}`,
+    status: "published",
+    created_at: "2026-10-29T10:00:00Z",
+    published_at: "2026-10-29T10:00:00Z",
+  }));
+
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: {
+        activity: {
+          id: "act-123",
+          public_code: "TESTCODE",
+          title: "Actividad 5k",
+          question: "¿Ideas?",
+          status: "open",
+          created_at: "2026-10-29T10:00:00Z",
+        },
+        ideas: fiveThousand,
+        total: 5000,
+      },
+      error: null,
+    }),
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 200);
+  const csv = await res.text();
+  assert.ok(csv.includes("Idea atómica 1"));
+  assert.ok(csv.includes("Idea atómica 5000"));
+});
+
+test("RPC-03: Contrato RPC - Desbordamiento de 5.000 ideas (>5.000) retorna 413", async () => {
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: {
+        error: "payload_too_large",
+        total: 5001,
+        limit: 5000,
+      },
+      error: null,
+    }),
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 413);
+  const json = await res.json();
+  assert.equal(json.error, "payload_too_large");
+  assert.equal(json.total, 5001);
+});
+
+test("RPC-04: Contrato RPC - Error 42501 (unauthorized) responde HTTP 401", async () => {
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: null,
+      error: { code: "42501", message: "unauthorized" },
+    }),
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 401);
+});
+
+test("RPC-05: Contrato RPC - Error P0002 (not_found_or_forbidden) responde HTTP 404", async () => {
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: null,
+      error: { code: "P0002", message: "not_found" },
+    }),
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 404);
+});
+
+test("RPC-06: Contrato RPC - Error inesperado de base de datos responde HTTP 500", async () => {
+  const supabase = createMockSupabase({
+    rpcHandler: async () => ({
+      data: null,
+      error: { code: "XX000", message: "internal error in database engine" },
+    }),
+  });
+
+  const req = new Request(
+    "http://localhost:3000/panel/actividad/act-123/exportar?format=csv",
+  );
+  const res = await GET(
+    req,
+    { params: Promise.resolve({ id: "act-123" }) },
+    supabase,
+  );
+
+  assert.equal(res.status, 500);
+  const json = await res.json();
+  assert.equal(json.error, "database_error");
 });

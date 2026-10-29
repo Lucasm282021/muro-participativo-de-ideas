@@ -13,6 +13,41 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function buildExportResponse(
+  activity: ExportableActivity,
+  ideas: ExportableIdea[],
+  format: "csv" | "html",
+  scope: "published" | "all",
+) {
+  let fileContent: string;
+  let contentType: string;
+
+  if (format === "csv") {
+    fileContent = generateCsv(ideas, scope);
+    contentType = "text/csv; charset=utf-8";
+  } else {
+    fileContent = generateHtmlSlideDeck(activity, ideas, scope);
+    contentType = "text/html; charset=utf-8";
+  }
+
+  const safeCode = (activity.public_code || "actividad").replace(
+    /[^a-zA-Z0-9_-]/g,
+    "",
+  );
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = `muro-${safeCode}-${dateStr}.${format}`;
+
+  return new NextResponse(fileContent, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -49,7 +84,60 @@ export async function GET(
     return new NextResponse(null, { status: 401 });
   }
 
-  // 3. Verificación de propiedad de la actividad
+  // 3. Intento de lectura atómica mediante función RPC si está disponible en el entorno
+  if (typeof supabase.rpc === "function") {
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "export_activity_ideas",
+      {
+        target_activity_id: id,
+        export_scope: scope,
+      },
+    );
+
+    if (!rpcError && rpcData) {
+      if (rpcData.error === "payload_too_large") {
+        return NextResponse.json(
+          {
+            error: "payload_too_large",
+            message: `La actividad excede el límite máximo de ${MAX_EXPORT_LIMIT.toLocaleString("es-AR")} ideas para exportación directa.`,
+            total: rpcData.total,
+          },
+          { status: 413 },
+        );
+      }
+
+      if (rpcData.activity && Array.isArray(rpcData.ideas)) {
+        return buildExportResponse(
+          rpcData.activity as ExportableActivity,
+          rpcData.ideas as ExportableIdea[],
+          format,
+          scope,
+        );
+      }
+    }
+
+    if (rpcError) {
+      const err = rpcError as { code?: string };
+      if (err.code === "42501") {
+        return new NextResponse(null, { status: 401 });
+      }
+      if (err.code === "P0002") {
+        return new NextResponse(null, { status: 404 });
+      }
+      // Si el error no es de función inexistente (42883 o PGRST202), responde error de base de datos
+      if (err.code && err.code !== "42883" && err.code !== "PGRST202") {
+        return NextResponse.json(
+          {
+            error: "database_error",
+            message: "Error al invocar la función de exportación.",
+          },
+          { status: 500 },
+        );
+      }
+    }
+  }
+
+  // 4. Verificación de propiedad de la actividad (Fallback vía tabla)
   // Si la actividad no existe o pertenece a otro usuario, responde 404 estricto
   const { data: rawActivity } = await supabase
     .from("activities")
@@ -64,7 +152,7 @@ export async function GET(
 
   const activity = rawActivity as ExportableActivity;
 
-  // 4. Conteo inicial y control de desbordamiento (tope 5.000 ideas)
+  // 5. Conteo inicial y control de desbordamiento (tope 5.000 ideas)
   let countQuery = supabase
     .from("ideas")
     .select("id", { count: "exact", head: true })
@@ -98,7 +186,7 @@ export async function GET(
     );
   }
 
-  // 5. Paginación por cursor determinista (keyset pagination)
+  // 6. Paginación por cursor determinista (keyset pagination)
   // Ancla cada lote al último par (created_at, id) para evitar corrimientos por offset ante mutaciones
   const allIdeas: ExportableIdea[] = [];
   const seenIds = new Set<string>();
@@ -156,7 +244,7 @@ export async function GET(
     }
   }
 
-  // 6. Verificación de integridad, reconteo y detección de inconsistencias concurrentes
+  // 7. Verificación de integridad, reconteo y detección de inconsistencias concurrentes
   let verifyQuery = supabase
     .from("ideas")
     .select("id", { count: "exact", head: true })
@@ -208,33 +296,6 @@ export async function GET(
     );
   }
 
-  // 7. Generación de contenido según formato
-  let fileContent: string;
-  let contentType: string;
-
-  if (format === "csv") {
-    fileContent = generateCsv(allIdeas, scope);
-    contentType = "text/csv; charset=utf-8";
-  } else {
-    fileContent = generateHtmlSlideDeck(activity, allIdeas, scope);
-    contentType = "text/html; charset=utf-8";
-  }
-
-  // 8. Construcción de nombre de archivo seguro
-  const safeCode = (activity.public_code || "actividad").replace(
-    /[^a-zA-Z0-9_-]/g,
-    "",
-  );
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const filename = `muro-${safeCode}-${dateStr}.${format}`;
-
-  return new NextResponse(fileContent, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  // 8. Construcción de respuesta
+  return buildExportResponse(activity, allIdeas, format, scope);
 }

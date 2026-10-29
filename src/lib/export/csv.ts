@@ -19,12 +19,21 @@ export const STATUS_LABELS: Record<ExportableIdea["status"], string> = {
  * 2. Escape de comillas dobles internas (duplicándolas: " -> "").
  * 3. Envoltura completa entre comillas dobles para admitir saltos de línea y el delimitador ';'.
  */
-export function sanitizeCsvField(value: string | number | null | undefined): string {
+export function sanitizeCsvField(
+  value: string | number | null | undefined,
+): string {
   if (value === null || value === undefined) return '""';
   let str = String(value);
 
+  // Protección reforzada contra CSV Injection (DDE):
+  // Detecta disparadores peligrosos (=, +, -, @, \t, \r) de forma directa
+  // o si van precedidos por espacios en blanco / espacios no separables
   const formulaTriggers = ["=", "+", "-", "@", "\t", "\r"];
-  if (formulaTriggers.some((trigger) => str.startsWith(trigger))) {
+  const isDirect = formulaTriggers.some((t) => str.startsWith(t));
+  const trimmed = str.replace(/^[ \u00A0]+/, "");
+  const isTrimmedTrigger = formulaTriggers.some((t) => trimmed.startsWith(t));
+
+  if (isDirect || isTrimmedTrigger) {
     str = `'${str}`;
   }
 
@@ -100,6 +109,5 @@ export function generateCsv(
     });
   }
 
-  return BOM + rows.join("\r\n") + "\r\n";
+  return `${BOM}${rows.join("\r\n")}\r\n`;
 }
-
