@@ -4,6 +4,7 @@ import { signOutAction } from "@/app/actions";
 import { AboutModal } from "@/components/about-modal";
 import { ActivityStatusToggle } from "@/components/activity-status-toggle";
 import { DeleteActivityButton } from "@/components/delete-activity-button";
+import { ExportActivityButton } from "@/components/export-activity-modal";
 import { IdeaModerationFilter } from "@/components/idea-moderation-filter";
 import { ModerationModeForm } from "@/components/moderation-mode-form";
 import { ShareQrPanel } from "@/components/share-qr-panel";
@@ -111,6 +112,11 @@ export default async function ActivityDetailPage({
             <p>{activity.question}</p>
           </div>
           <div className="detail-actions">
+            <ExportActivityButton
+              activityId={id}
+              activityTitle={activity.title}
+              publicCode={activity.public_code}
+            />
             <Link
               className="button button-quiet"
               href={`/a/${activity.public_code}`}
