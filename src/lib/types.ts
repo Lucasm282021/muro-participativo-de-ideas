@@ -15,6 +15,7 @@ export type Idea = {
   activity_id: string;
   content: string;
   status: "pending" | "published" | "hidden";
+  idea_number?: number | null;
   created_at: string;
   published_at: string | null;
 };

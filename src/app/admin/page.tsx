@@ -33,7 +33,7 @@ function resolveActivityCode(
   return null;
 }
 
-export function resolveAuditPresentation(log: {
+function resolveAuditPresentation(log: {
   action: string;
   payload: Record<string, unknown> | null;
 }) {

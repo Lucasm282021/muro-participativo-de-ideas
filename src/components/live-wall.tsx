@@ -1,8 +1,8 @@
 "use client";
 
+import { AboutModal } from "@/components/about-modal";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AboutModal } from "@/components/about-modal";
 import {
   BATCH_CAP,
   type Cursor,
@@ -44,30 +44,59 @@ function getGridConfig(
   const isWide = aspect >= 1.2;
 
   if (isWide) {
-    if (count === 1) return { cols: 1, rows: 1 };
-    if (count === 2) return { cols: 2, rows: 1 };
-    if (count === 3) return { cols: 2, rows: 2 };
-    if (count === 4) return { cols: 2, rows: 2 };
-    if (count <= 6) return { cols: 3, rows: 2 };
-    if (count <= 8) return { cols: 4, rows: 2 };
-    if (count === 9) return { cols: 3, rows: 3 };
-    if (count <= 12) return { cols: 4, rows: 3 };
-    if (count <= 16) return { cols: 4, rows: 4 };
-    if (count <= 20) return { cols: 5, rows: 4 };
-    if (count <= 24) return { cols: 6, rows: 4 };
-    if (count <= 30) return { cols: 6, rows: 5 };
-    if (count <= 36) return { cols: 6, rows: 6 };
-    if (count <= 42) return { cols: 7, rows: 6 };
-    return { cols: 8, rows: 6 };
+    // Dimensiones objetivo para tarjetas de tamaño natural en escritorio/proyector (260-320px ancho, 160-220px alto)
+    const targetWidth = 285;
+    const targetHeight = 185;
+    const gap = 8;
+
+    const baseCols =
+      containerWidth > 0
+        ? Math.max(2, Math.min(6, Math.floor((containerWidth + gap) / (targetWidth + gap))))
+        : 4;
+    const baseRows =
+      containerHeight > 0
+        ? Math.max(2, Math.min(5, Math.floor((containerHeight + gap) / (targetHeight + gap))))
+        : 4;
+
+    const naturalCapacity = baseCols * baseRows;
+
+    // Llenado progresivo en baja y media densidad:
+    // La grilla mantiene columnas y filas estables según la pantalla para que las tarjetas
+    // no se deformen ni se expandan a pantalla completa cuando hay pocas ideas.
+    if (count <= naturalCapacity) {
+      return { cols: baseCols, rows: baseRows };
+    }
+
+    // Alta densidad con prioridad de legibilidad (máximo 6 cols x 5 filas por viewport):
+    if (count <= 24) return { cols: Math.max(baseCols, 6), rows: 4 };
+    if (count <= 30) return { cols: Math.max(baseCols, 6), rows: 5 };
+    // Con más de 30 ideas, se preserva el ancho legible de 6 columnas y las filas crecen
+    // con altura cómoda (~160px) con desplazamiento suave, sin truncar texto en 3 líneas:
+    const maxCols = Math.max(baseCols, 6);
+    const scrollRows = Math.ceil(count / maxCols);
+    return { cols: maxCols, rows: scrollRows };
   } else {
-    if (count === 1) return { cols: 1, rows: 1 };
-    if (count === 2) return { cols: 1, rows: 2 };
-    if (count <= 4) return { cols: 2, rows: 2 };
-    if (count <= 6) return { cols: 2, rows: 3 };
-    if (count <= 8) return { cols: 2, rows: 4 };
-    if (count <= 12) return { cols: 3, rows: 4 };
-    if (count <= 16) return { cols: 4, rows: 4 };
-    if (count <= 20) return { cols: 4, rows: 5 };
+    // Pantallas verticales (portrait / mobile / tablets)
+    const targetWidth = 240;
+    const targetHeight = 160;
+    const gap = 8;
+
+    const baseCols =
+      containerWidth > 0
+        ? Math.max(2, Math.min(4, Math.floor((containerWidth + gap) / (targetWidth + gap))))
+        : 2;
+    const baseRows =
+      containerHeight > 0
+        ? Math.max(3, Math.min(6, Math.floor((containerHeight + gap) / (targetHeight + gap))))
+        : 4;
+
+    const naturalCapacity = baseCols * baseRows;
+
+    if (count <= naturalCapacity) {
+      return { cols: baseCols, rows: baseRows };
+    }
+
+    if (count <= 16) return { cols: 3, rows: 6 };
     if (count <= 24) return { cols: 4, rows: 6 };
     if (count <= 30) return { cols: 5, rows: 6 };
     if (count <= 36) return { cols: 6, rows: 6 };
@@ -1136,9 +1165,10 @@ export function LiveWall({
     containerSize.width > 0
       ? (containerSize.width - gap * (cols - 1)) / cols
       : 200;
+  const visibleRows = Math.min(rows, 5);
   const cellHeight =
     containerSize.height > 0
-      ? (containerSize.height - gap * (rows - 1)) / rows
+      ? (containerSize.height - gap * (visibleRows - 1)) / visibleRows
       : 150;
 
   return (
@@ -1193,12 +1223,7 @@ export function LiveWall({
                 <p>{featured.idea.content}</p>
                 <div className="featured-footer">
                   <span className="idea-number">
-                    {new Intl.DateTimeFormat("es-AR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "America/Argentina/Buenos_Aires",
-                    }).format(new Date(featured.idea.created_at))}
-                  </span>
+                    {featured.idea.idea_number != null ? `#${featured.idea.idea_number}` : null}</span>
                 </div>
                 {featured.phase === "holding" && (
                   <div className="featured-progress-bar" />
@@ -1242,12 +1267,7 @@ export function LiveWall({
                     }
                   >
                     <span className="idea-number">
-                      {new Intl.DateTimeFormat("es-AR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        timeZone: "America/Argentina/Buenos_Aires",
-                      }).format(new Date(idea.created_at))}
-                    </span>
+                      {idea.idea_number != null ? `#${idea.idea_number}` : null}</span>
                     <p>{idea.content}</p>
                   </article>
                 );

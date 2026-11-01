@@ -19,7 +19,7 @@ export default async function PublicWallPage({
 
   const { data } = await supabase
     .from("ideas")
-    .select("id, activity_id, content, status, created_at, published_at")
+    .select("id, activity_id, content, status, idea_number, created_at, published_at")
     .eq("activity_id", activity.id)
     .eq("status", "published")
     .order("created_at", { ascending: false })
