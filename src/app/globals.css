@@ -1593,10 +1593,15 @@ textarea:focus-visible {
   cursor: not-allowed;
 }
 
-/* Modal de exportación accesible */
+/* Modal de exportación accesible y responsivo */
+.export-modal-card {
+  width: min(100%, 580px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
 .export-modal-badge {
-  background: #e8f0fe;
-  color: #1a73e8;
+  background: #e8f5e9;
+  color: #2e7d32;
   font-size: 20px;
 }
 .export-fieldset {
@@ -1608,35 +1613,178 @@ textarea:focus-visible {
   gap: 8px;
 }
 .export-legend {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: #4b5249;
   padding: 0 4px;
 }
 .export-radio-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
-.export-radio-label {
+.export-radio-card {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e1dfd5;
+  border-radius: 6px;
+  background: #ffffff;
   cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.export-radio-card:hover {
+  background: #fbfaf6;
+  border-color: #c9c7bb;
+}
+.export-radio-card.active {
+  border-color: #315c3b;
+  background: #f6f8f5;
+  box-shadow: 0 1px 3px rgba(49, 92, 59, 0.08);
+}
+.export-radio-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: #315c3b;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.export-radio-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.export-radio-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.export-radio-title-row strong {
   font-size: 13px;
-  line-height: 1.4;
   color: #1f241e;
 }
-.export-radio-label input[type="radio"] {
-  margin-top: 3px;
-  accent-color: #1a73e8;
+.export-format-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
 }
-.export-radio-label p {
-  margin: 2px 0 0;
+.export-badge-html {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+.export-badge-csv {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border: 1px solid #cce0ff;
+}
+.export-radio-content p {
+  margin: 0;
   font-size: 12px;
-  color: #61695f;
+  color: #555c52;
+  line-height: 1.4;
+}
+
+/* Panel contextual explicativo */
+.export-context-panel {
+  background: #f8f7f2;
+  border: 1px solid #e1dfd5;
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.export-context-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #315c3b;
+  margin: 0;
+}
+.export-modes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.export-mode-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.export-mode-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.export-mode-item strong {
+  color: #1f241e;
+  display: block;
+  font-size: 12px;
+}
+.export-mode-item p {
+  margin: 1px 0 0;
+  color: #555c52;
+  font-size: 11.5px;
+}
+.export-features-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #deded5;
+}
+.export-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #3b4339;
+  background: #ffffff;
+  border: 1px solid #deded5;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  line-height: 1.3;
+}
+.export-csv-desc {
+  margin: 0;
+  font-size: 12.5px;
+  color: #1f241e;
+  line-height: 1.45;
+}
+.export-csv-features {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: #555c52;
+  line-height: 1.5;
+}
+.export-csv-features li {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 520px) {
+  .export-modal-card {
+    padding: 18px 16px;
+  }
+  .export-modes-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .export-context-panel {
+    padding: 12px;
+  }
+  .export-pill {
+    font-size: 10.5px;
+  }
 }
 .export-privacy-notice {
   display: flex;
