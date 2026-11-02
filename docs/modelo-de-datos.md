@@ -1,12 +1,16 @@
-# Modelo de datos del MVP
+# Modelo de datos relacional y seguridad en base de datos
 
-El esquema inicial vive en `supabase/migrations/20261002080804_initial_data_model.sql`.
+El esquema relacional de la aplicación se gestiona mediante migraciones SQL versionadas en el directorio `supabase/migrations/`.
 
-## Entidades
+---
+
+## 1. Diagrama Entidad-Relación (ERD)
 
 ```mermaid
 erDiagram
     AUTH_USERS ||--o{ ACTIVITIES : organiza
+    AUTH_USERS ||--o| ADMIN_GLOBAL : rol_global
+    AUTH_USERS ||--o{ AUDIT_LOGS : audita
     ACTIVITIES ||--o{ PARTICIPANTS : registra
     ACTIVITIES ||--o{ IDEAS : recibe
     IDEAS ||--|| IDEA_AUTHORS : atribuye
@@ -14,6 +18,11 @@ erDiagram
 
     AUTH_USERS {
         uuid id PK
+    }
+    ADMIN_GLOBAL {
+        uuid user_id PK_FK
+        timestamptz created_at
+        uuid created_by FK
     }
     ACTIVITIES {
         uuid id PK
@@ -23,6 +32,7 @@ erDiagram
         string question
         activity_status status
         moderation_mode moderation_mode
+        integer last_idea_number "Contador atómico"
         timestamptz created_at
         timestamptz opened_at
         timestamptz closed_at
@@ -40,6 +50,7 @@ erDiagram
         uuid activity_id FK
         string content
         idea_status status
+        integer idea_number "Correlativo por actividad"
         timestamptz created_at
         timestamptz published_at
     }
@@ -49,41 +60,97 @@ erDiagram
         uuid participant_id FK
         timestamptz created_at
     }
+    AUDIT_LOGS {
+        uuid id PK
+        timestamptz created_at
+        uuid actor_id FK
+        text action
+        text target_type
+        text target_id
+        jsonb details "Payload V2 con conteos de cascada"
+    }
 ```
 
-### `activities`
+---
 
-Pertenece a una cuenta de organizador de Supabase Auth. Tiene un código público aleatorio de ocho caracteres, título, pregunta, estado (`draft`, `open` o `closed`) y modo de publicación (`automatic` o `approval`). La publicación automática es el valor inicial.
+## 2. Descripción de Entidades
+
+### `activities`
+Representa una dinámica o taller convocado por un organizador (`owner_id` vinculado a `auth.users`).
+- **Campos destacados:**
+  - `public_code`: Código alfanumérico único de 8 caracteres utilizado en URLs de participación y proyección.
+  - `status`: Enumerado `'draft'`, `'open'` o `'closed'`.
+  - `moderation_mode`: Enumerado `'automatic'` (publicación directa) o `'approval'` (revisión obligatoria previa).
+  - `last_idea_number`: Entero contador monótono incremental (`DEFAULT 0`), actualizado atómicamente por trigger al insertar ideas para garantizar numeración correlativa sin saltos concurrentes.
 
 ### `participants`
-
-Registra nombre, apellido y email dentro de una actividad. El email se guarda normalizado a minúsculas y es único por actividad. No se crea una cuenta de participante ni se verifica su email. Al borrar la actividad se eliminan estos datos.
+Registra a las personas que envían ideas dentro de una actividad específica.
+- `email`: Almacenado normalizado en minúsculas. Es único por combinación `(activity_id, email)`.
+- No requiere creación de cuenta de usuario ni contraseña.
+- Se elimina en cascada al suprimirse la actividad.
 
 ### `ideas`
-
-Guarda el texto de hasta 500 caracteres y su estado (`pending`, `published` o `hidden`). No contiene nombre, email ni identificador de participante, por lo que el flujo público de Realtime no necesita transportar datos personales.
+Almacena el contenido textual propuesto (de 1 a 500 caracteres) y su estado de moderación.
+- `status`: Enumerado `'pending'`, `'published'` o `'hidden'`.
+- `idea_number`: Entero correlativo asignado de forma determinista y atómica por la función trigger `assign_idea_number()`.
+- **Restricción de integridad:** `UNIQUE (activity_id, idea_number)` que garantiza que no puedan existir dos ideas con el mismo número dentro de la misma actividad.
+- **Privacidad:** La tabla no almacena referencias directas de autor ni datos personales del participante.
 
 ### `idea_authors`
+Tabla de atribución privada que vincula unívocamente una idea con el participante que la redactó.
+- Claves foráneas compuestas con `ON DELETE CASCADE`.
+- Solo accesible mediante RLS por el propietario organizador de la actividad o por administradores con privilegios de auditoría.
 
-Vincula cada idea con el participante que la envió. Solo el organizador dueño de la actividad puede leer esta relación. Sus claves foráneas compuestas impiden asociar una idea o participante de otra actividad.
+### `admin_global`
+Registro de identidades autorizadas con el rol de superadministrador de plataforma.
+- `user_id`: Clave foránea contra `auth.users(id)` con eliminación en cascada.
+- No dispone de Server Actions públicas de asignación. Se aprovisiona exclusivamente por procedimiento manual en base de datos.
 
-## Reglas de acceso y comportamiento
+### `audit_logs`
+Bitácora de auditoría administrativa inmutable.
+- Registra cada acción de borrado o cambio de estado ejecutada en `/admin`.
+- `details`: Almacena metadatos JSONB con versión de contrato (`contract_version = 2`), incluyendo conteos atómicos previos a operaciones en cascada (`activity_count`, `participant_count`, `idea_count`).
 
-- Las tablas tienen RLS activado; los permisos SQL y las políticas RLS se definen juntos en la migración.
-- Cualquier visitante puede leer campos públicos de actividades abiertas o cerradas, y solo ideas publicadas de esas actividades.
-- El organizador puede consultar y administrar sus actividades, ver los datos de sus participantes, moderar y eliminar ideas.
-- El organizador puede eliminar una actividad propia. Las claves foráneas con `ON DELETE CASCADE` eliminan también las ideas, los participantes y los vínculos de autoría; la app no tiene recuperación para esta operación.
-- Las escrituras de participantes, ideas y autoría pasan por la función `submit_idea`, invocada desde una Server Action. La función registra los datos de forma atómica y devuelve solo el estado e ID de la idea; no expone la clave `service_role`.
-- Una idea solo se puede insertar mientras la actividad está abierta. La base de datos aplica el modo vigente: `published` en automático y `pending` con aprobación.
-- Cambiar el modo afecta las ideas nuevas. Las ideas que ya estaban pendientes siguen pendientes hasta que el organizador las revise.
-- Al cerrar una actividad, las ideas publicadas siguen disponibles para la pantalla pública y ya no se admiten envíos.
-- No hay tabla de votos en esta etapa; se incorpora cuando se implemente la segunda fase.
+---
 
-## Migración y pantallas
+## 3. Inventario de Migraciones y Estado de Sincronización
 
-- `20261002120000_submit_idea_rpc.sql` agrega la función que recibe el código público, los datos del participante y el texto de la idea.
-- `/panel` permite crear actividades y revisar el historial. `/panel/actividad/[id]` muestra participantes solo al organizador y permite moderar ideas, cambiar el modo de publicación, cerrar o reabrir la actividad y eliminarla.
-- `/a/[code]` es el formulario móvil para participar. `/muro/[code]` es la pantalla pública con QR y actualización en tiempo real.
-- Los organizadores usan `/crear-cuenta` y `/ingresar`. `/recuperar-contrasena`, `/auth/callback` y `/restablecer-contrasena` implementan el flujo de recuperación de contraseña de Supabase Auth.
+| Migración | Propósito y Contrato | Estado Local | Estado Producción |
+| :--- | :--- | :---: | :---: |
+| `20261002080804_initial_data_model.sql` | Esquema base, RLS inicial y tipos enumerados. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261002120000_submit_idea_rpc.sql` | Función transaccional `submit_idea`. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261012142000_restrict_activities_read_to_anon.sql` | Restricción de columnas de actividad visibles al público. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261012160000_submit_idea_rate_limit_and_dedupe.sql` | Rate limiting de 30s y deduplicación exacta en `submit_idea`. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261018040000_admin_global_authorization.sql` | Creación de `admin_global`, `audit_logs` y funciones de guarda. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261018083000_audit_logs_admin_read_policy.sql` | Política RLS para lectura de bitácora por `admin_global`. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261020130000_administrative_audit_hardening.sql` | Endurecimiento de funciones y bitácora de auditoría V1. | Aplicada | Aplicación documentada en reportes históricos del proyecto; sin consulta remota independiente en la auditoría actual. |
+| `20261021140000_audit_cascade_counts_v2.sql` | Auditoría V2 con conteo pre-cascada y `contract_version=2`. | Aplicada | **DESCONOCIDO** |
+| `20261028150000_ideas_atomic_numbering.sql` | `last_idea_number`, `idea_number` y trigger atómico. | Aplicada | **DESCONOCIDO** |
+| `20261029170000_export_activity_ideas_rpc.sql` | RPC `export_activity_ideas` para exportación en JSONB. | Aplicada | **DESCONOCIDO** |
 
-El alcance del MVP y sus límites de seguridad y despliegue están descritos en [arquitectura.md](arquitectura.md) y [despliegue.md](despliegue.md).
+---
+
+## 4. Observaciones de Precisión Documental y Defectos de Seguridad
+
+### 4.1. Defecto de permisos sobre `idea_number` para rol anónimo (`anon`)
+- En la migración fundacional `20261002080804`, la tabla `ideas` recibió un permiso selectivo por columnas:
+  ```sql
+  GRANT SELECT (id, activity_id, content, status, created_at, published_at)
+    ON TABLE public.ideas TO anon;
+  ```
+- Al introducir la columna `idea_number` en `20261028150000_ideas_atomic_numbering.sql`, **no se ejecutó** la instrucción correspondiente para otorgar acceso a dicho campo:
+  ```sql
+  -- Instrucción omitida en 20261028150000:
+  GRANT SELECT (idea_number) ON TABLE public.ideas TO anon;
+  ```
+- **Consecuencia técnica:** Las consultas directas ejecutadas desde el navegador por usuarios sin autenticar (muro público) que intenten proyectar `idea_number` resultarán en error de PostgreSQL `permission denied for column idea_number of relation ideas`.
+- **Falta en cliente:** En `src/components/live-wall.tsx`, las consultas de descubrimiento y reconciliación (*catch-up*) omiten `idea_number`, causando que las ideas recuperadas tras reconexión carezcan de número asignado en memoria.
+
+### 4.2. Situación de la Migración 10 (`20261029170000`)
+- La migración `20261029170000_export_activity_ideas_rpc.sql` se encuentra físicamente aplicada en la base de datos PostgreSQL local.
+- **Constancia formal:** La auditoría técnica 14O constató que **no existe registro documental de autorización previa** para la aplicación de esta migración en la base de datos local.
+- Se documenta expresamente esta discrepancia de procedimiento sin inferir autorización retroactiva.
+- **Regla estricta:** Queda terminantemente prohibido aplicar esta migración en el entorno de producción hasta que se emita la autorización expresa del usuario.
+
+### 4.3. Estado no verificado de producción para migraciones 8, 9 y 10
+No existe evidencia documental ni telemetría comprobable de que las migraciones `20261021140000`, `20261028150000` y `20261029170000` hayan sido ejecutadas en la base de datos conectada a producción. Se registran bajo el estado formal de **DESCONOCIDO**.
