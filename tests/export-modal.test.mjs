@@ -126,12 +126,16 @@ test('MODAL-06: Conservación del selector de alcance y adaptación textual cont
 
 test('MODAL-07: Preservación de aviso de privacidad y protección de datos', () => {
   assert.ok(
-    componentContent.includes('Privacidad garantizada:'),
-    'Aviso de privacidad obligatorio'
+    componentContent.includes('Protección de datos personales:'),
+    'Encabezado de aviso de privacidad claro y visible'
   );
   assert.ok(
-    componentContent.includes('nunca se incluyen en los archivos exportados'),
-    'Exclusión taxativa de datos personales'
+    componentContent.includes('datos de identificación de las cuentas'),
+    'Exclusión transparente de cuentas de usuario y correos'
+  );
+  assert.ok(
+    componentContent.includes('tal como fue enviado'),
+    'Advertencia precisa sobre datos personales escritos voluntariamente en el cuerpo de las ideas'
   );
   assert.ok(
     componentContent.includes('role="note"'),

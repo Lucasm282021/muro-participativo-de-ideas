@@ -393,9 +393,12 @@ export function ExportActivityModal({
           <div className="export-privacy-notice" role="note">
             <span aria-hidden="true">🔒</span>
             <p>
-              <strong>Privacidad garantizada:</strong> Los nombres, direcciones
-              de correo electrónico y datos personales de los participantes
-              nunca se incluyen en los archivos exportados.
+              <strong>Protección de datos personales:</strong> La exportación no
+              incluye los datos de identificación de las cuentas de los
+              participantes (como nombres o correos electrónicos). El contenido
+              de las ideas se exporta tal como fue enviado; si un autor incluyó
+              datos personales dentro de su texto, estos aparecerán en el
+              archivo exportado.
             </p>
           </div>
 

@@ -282,3 +282,65 @@ test('HTML-12: Accesibilidad del selector de pestañas (tablist, tabindex y flec
   // Prevención de conflictos con la navegación de diapositivas
   assert.ok(html.includes("closest('.modes-selector')"), 'La navegación de diapositivas debe ignorar eventos con foco en las pestañas');
 });
+
+test('HTML-13: Numeración correlativa determinista en Presentación sin depender de idea_number en RPC', () => {
+  const activity = {
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    public_code: 'NUMTEST',
+    title: 'Actividad de prueba de numeración',
+    question: '¿Qué opinás de la numeración?',
+    status: 'open',
+    created_at: '2026-11-01T12:00:00Z'
+  };
+
+  // Ideas idénticas a las que entrega la RPC (sin propiedad idea_number)
+  const rpcIdeas = [
+    {
+      id: 'idea-uuid-1',
+      content: 'Primera idea enviada por la comunidad sin número explícito en RPC',
+      status: 'published',
+      created_at: '2026-11-01T10:00:00Z',
+      published_at: '2026-11-01T10:05:00Z'
+    },
+    {
+      id: 'idea-uuid-2',
+      content: 'Segunda idea breve comunitaria',
+      status: 'published',
+      created_at: '2026-11-01T11:00:00Z',
+      published_at: '2026-11-01T11:05:00Z'
+    },
+    {
+      id: 'idea-uuid-3',
+      content: 'Tercera idea extensa con más de ciento cuarenta caracteres para forzar que ocupe una diapositiva individual en la modalidad de presentación interactiva sin perder su numeración.',
+      status: 'published',
+      created_at: '2026-11-01T12:00:00Z',
+      published_at: '2026-11-01T12:05:00Z'
+    }
+  ];
+
+  const html = generateHtmlSlideDeck(activity, rpcIdeas, 'published');
+
+  // En Presentación, las tarjetas deben contener #1, #2 y #3 en .idea-number
+  assert.ok(
+    html.includes('<span class="idea-number">#1</span>'),
+    'La primera idea en Presentación debe mostrar #1'
+  );
+  assert.ok(
+    html.includes('<span class="idea-number">#2</span>'),
+    'La segunda idea en Presentación debe mostrar #2'
+  );
+  assert.ok(
+    html.includes('<span class="idea-number">#3</span>'),
+    'La tercera idea (diapositiva individual) en Presentación debe mostrar #3'
+  );
+
+  // En Mosaico, deben coincidir exactamente con #1, #2 y #3
+  assert.ok(html.includes('<span class="idea-badge-num">#1</span>'), 'Mosaico #1');
+  assert.ok(html.includes('<span class="idea-badge-num">#2</span>'), 'Mosaico #2');
+  assert.ok(html.includes('<span class="idea-badge-num">#3</span>'), 'Mosaico #3');
+
+  // En Listado, deben coincidir exactamente con formato de dos dígitos #01, #02 y #03
+  assert.ok(html.includes('<span class="list-item-num">#01</span>'), 'Listado #01');
+  assert.ok(html.includes('<span class="list-item-num">#02</span>'), 'Listado #02');
+  assert.ok(html.includes('<span class="list-item-num">#03</span>'), 'Listado #03');
+});

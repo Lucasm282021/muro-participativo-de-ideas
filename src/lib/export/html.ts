@@ -111,6 +111,12 @@ export function generateHtmlSlideDeck(
   ideas: ExportableIdea[],
   scope: "published" | "all" = "published",
 ): string {
+  // Mapa de numeración correlativa determinista para consistencia total entre Presentación, Mosaico y Listado
+  const ideaNumberMap = new Map<string, number>();
+  ideas.forEach((idea, idx) => {
+    ideaNumberMap.set(idea.id, idea.idea_number ?? idx + 1);
+  });
+
   const slides = buildSlides(ideas);
   const totalSlides = slides.length;
   const generatedAt = new Date().toLocaleString("es-AR", {
@@ -179,7 +185,8 @@ export function generateHtmlSlideDeck(
 
       const ideasCards = slideIdeas
         .map((idea) => {
-          const numDisplay = idea.idea_number ? `#${idea.idea_number}` : "";
+          const num = idea.idea_number ?? ideaNumberMap.get(idea.id);
+          const numDisplay = num !== undefined ? `#${num}` : "";
           const statusBadge =
             scope === "all"
               ? `<span class="status-badge status-${escapeHtml(idea.status)}">${escapeHtml(STATUS_LABELS[idea.status] ?? idea.status)}</span>`
@@ -222,7 +229,7 @@ export function generateHtmlSlideDeck(
       <div class="mosaic-grid">
         ${ideas
           .map((idea, idx) => {
-            const num = idea.idea_number ?? idx + 1;
+            const num = idea.idea_number ?? ideaNumberMap.get(idea.id) ?? idx + 1;
             const dateStr = formatDate(idea.published_at || idea.created_at);
             const statusBadge =
               scope === "all"
@@ -257,7 +264,7 @@ export function generateHtmlSlideDeck(
       <div class="list-container" role="list">
         ${ideas
           .map((idea, idx) => {
-            const num = idea.idea_number ?? idx + 1;
+            const num = idea.idea_number ?? ideaNumberMap.get(idea.id) ?? idx + 1;
             const dateStr = formatDate(idea.published_at || idea.created_at);
             const statusBadge =
               scope === "all"
