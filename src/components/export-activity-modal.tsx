@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-interface ExportActivityModalProps {
+export interface ExportActivityModalProps {
   activityId: string;
   activityTitle: string;
   publicCode: string;
@@ -39,18 +39,18 @@ export function ExportActivityButton({
   );
 }
 
-interface ModalInternalProps extends ExportActivityModalProps {
+export interface ModalInternalProps extends ExportActivityModalProps {
   onClose: () => void;
 }
 
-function ExportActivityModal({
+export function ExportActivityModal({
   activityId,
   activityTitle,
   publicCode,
   onClose,
 }: ModalInternalProps) {
   const [mounted, setMounted] = useState(false);
-  const [format, setFormat] = useState<"csv" | "html">("csv");
+  const [format, setFormat] = useState<"csv" | "html">("html");
   const [includeAll, setIncludeAll] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +185,12 @@ function ExportActivityModal({
 
   if (!mounted) return null;
 
+  const mainButtonLabel = loading
+    ? "Generando descarga…"
+    : format === "html"
+      ? "Exportar HTML"
+      : "Exportar CSV";
+
   return createPortal(
     <div className="delete-modal-backdrop">
       <div
@@ -204,10 +210,11 @@ function ExportActivityModal({
           </span>
           <div>
             <h2 id="export-dialog-title" className="delete-modal-title">
-              Exportar resultados de la actividad
+              Exportar resultados
             </h2>
             <p className="delete-modal-subtitle">
-              Actividad: <strong>“{activityTitle}”</strong>
+              Elegí cómo querés llevarte la información de esta actividad:{" "}
+              <strong>“{activityTitle}”</strong>
             </p>
           </div>
         </div>
@@ -216,25 +223,9 @@ function ExportActivityModal({
           <fieldset className="export-fieldset">
             <legend className="export-legend">Formato de exportación</legend>
             <div className="export-radio-group">
-              <label className="export-radio-label">
-                <input
-                  type="radio"
-                  name="export-format"
-                  value="csv"
-                  checked={format === "csv"}
-                  onChange={() => setFormat("csv")}
-                  disabled={loading}
-                />
-                <div>
-                  <strong>CSV (.csv) — Planilla de cálculo</strong>
-                  <p>
-                    Compatible con Excel y Google Sheets. Delimitado por punto y
-                    coma (;) con codificación UTF-8 y protección contra
-                    fórmulas.
-                  </p>
-                </div>
-              </label>
-              <label className="export-radio-label">
+              <label
+                className={`export-radio-card ${format === "html" ? "active" : ""}`}
+              >
                 <input
                   type="radio"
                   name="export-format"
@@ -243,17 +234,140 @@ function ExportActivityModal({
                   onChange={() => setFormat("html")}
                   disabled={loading}
                 />
-                <div>
-                  <strong>HTML (.html) — Presentación de diapositivas</strong>
+                <div className="export-radio-content">
+                  <div className="export-radio-title-row">
+                    <span className="export-format-badge export-badge-html">
+                      HTML
+                    </span>
+                    <strong>HTML interactivo</strong>
+                  </div>
                   <p>
-                    Documento autocontenido con navegación por teclado y
-                    controles. Funciona sin conexión a internet y se adapta a la
-                    extensión de las ideas.
+                    Documento autónomo con cuatro modalidades de visualización
+                    para consultar, presentar y compartir.
+                  </p>
+                </div>
+              </label>
+
+              <label
+                className={`export-radio-card ${format === "csv" ? "active" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="export-format"
+                  value="csv"
+                  checked={format === "csv"}
+                  onChange={() => setFormat("csv")}
+                  disabled={loading}
+                />
+                <div className="export-radio-content">
+                  <div className="export-radio-title-row">
+                    <span className="export-format-badge export-badge-csv">
+                      CSV
+                    </span>
+                    <strong>Planilla de cálculo</strong>
+                  </div>
+                  <p>
+                    Datos organizados para abrir, filtrar y trabajar en Excel o
+                    Google Sheets.
                   </p>
                 </div>
               </label>
             </div>
           </fieldset>
+
+          {/* Bloque contextual según formato seleccionado */}
+          {format === "html" ? (
+            <div className="export-context-panel" aria-live="polite">
+              <h3 className="export-context-title">
+                Una exportación, cuatro formas de explorar la información:
+              </h3>
+              <div className="export-modes-grid">
+                <div className="export-mode-item">
+                  <span className="export-mode-icon" aria-hidden="true">
+                    📽️
+                  </span>
+                  <div>
+                    <strong>Presentación</strong>
+                    <p>Recorré las ideas en formato de diapositivas.</p>
+                  </div>
+                </div>
+                <div className="export-mode-item">
+                  <span className="export-mode-icon" aria-hidden="true">
+                    🗂️
+                  </span>
+                  <div>
+                    <strong>Mosaico de ideas</strong>
+                    <p>Visualizá las propuestas en tarjetas.</p>
+                  </div>
+                </div>
+                <div className="export-mode-item">
+                  <span className="export-mode-icon" aria-hidden="true">
+                    📋
+                  </span>
+                  <div>
+                    <strong>Listado detallado</strong>
+                    <p>
+                      {includeAll
+                        ? "Consultá todas las ideas (publicadas y moderadas) en formato organizado."
+                        : "Consultá las ideas publicadas en un formato organizado."}
+                    </p>
+                  </div>
+                </div>
+                <div className="export-mode-item">
+                  <span className="export-mode-icon" aria-hidden="true">
+                    📊
+                  </span>
+                  <div>
+                    <strong>Análisis de resultados</strong>
+                    <p>
+                      Explorá métricas y estadísticas calculadas a partir de la
+                      información disponible.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="export-features-strip">
+                <span className="export-pill">
+                  📱 Diseñado para celulares, tablets y computadoras
+                </span>
+                <span className="export-pill">
+                  ⚡ Sin conexión a Internet
+                </span>
+                <span className="export-pill">
+                  🔄 4 vistas en 1 archivo
+                </span>
+                <span className="export-pill">
+                  🖨️ Impresión y PDF
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="export-context-panel" aria-live="polite">
+              <h3 className="export-context-title">
+                Datos estructurados para planilla
+              </h3>
+              <p className="export-csv-desc">
+                Datos organizados para abrir, filtrar y trabajar en una hoja de
+                cálculo.
+              </p>
+              <ul className="export-csv-features">
+                <li>
+                  Compatible con Microsoft Excel, Google Sheets y LibreOffice
+                  Calc.
+                </li>
+                <li>
+                  Delimitado por punto y coma (;) conforme a la configuración
+                  regional argentina.
+                </li>
+                <li>
+                  Codificación UTF-8 con BOM para preservación nítida de tildes
+                  y emojis.
+                </li>
+                <li>Protección contra inyección de fórmulas (CSV / DDE).</li>
+              </ul>
+            </div>
+          )}
 
           <fieldset className="export-fieldset">
             <legend className="export-legend">Alcance de las ideas</legend>
@@ -268,16 +382,16 @@ function ExportActivityModal({
                 <strong>Incluir ideas pendientes y ocultas</strong>
                 <br />
                 <span style={{ fontSize: "12px", color: "#666" }}>
-                  Por defecto solo se exportan las ideas publicadas en el muro.
-                  Al marcar esta opción, cada idea identificará explícitamente
-                  su estado.
+                  {includeAll
+                    ? "Se exportarán todas las ideas registradas (publicadas, pendientes de moderación y ocultas), identificando el estado de cada una."
+                    : "Por defecto solo se exportan las ideas publicadas visibles en el muro. Al marcar esta opción, se incluirán también las pendientes y ocultas."}
                 </span>
               </span>
             </label>
           </fieldset>
 
           <div className="export-privacy-notice" role="note">
-            <span>🔒</span>
+            <span aria-hidden="true">🔒</span>
             <p>
               <strong>Privacidad garantizada:</strong> Los nombres, direcciones
               de correo electrónico y datos personales de los participantes
@@ -309,7 +423,7 @@ function ExportActivityModal({
             disabled={loading}
             aria-busy={loading}
           >
-            {loading ? "Generando descarga…" : "Descargar archivo"}
+            {mainButtonLabel}
           </button>
         </div>
       </div>
