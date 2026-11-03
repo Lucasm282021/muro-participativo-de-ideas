@@ -1264,12 +1264,55 @@ async function runAllTests() {
 
   console.log('[51/54] Timeout o terminación por señal: gitExec() real clasifica la excepción como error');
   {
-    const resTimeout = gitExec(['rev-list', '--count', 'HEAD'], { timeout: 1 });
-    assert.strictEqual(resTimeout.ok, false);
-    assert.strictEqual(resTimeout.exitCode, -1);
-    assert.strictEqual(resTimeout.error.code, 'ETIMEDOUT');
-    assert.notStrictEqual(resTimeout.exitCode, 1, 'Timeout NUNCA debe convertirse en código 1');
-    console.log('  ✔ gitExec() real clasifica timeout como error de ejecución con exitCode -1.');
+    const fs = require('fs');
+    const os = require('os');
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-audit-timeout-test-'));
+
+    try {
+      // 1. Crear ejecutable auxiliar controlado en directorio temporal fuera del repositorio.
+      // process.execPath (el binario de Node.js) se copia con el nombre del comando ejecutado por gitExec ('git' o 'git.exe').
+      const binaryName = process.platform === 'win32' ? 'git.exe' : 'git';
+      const fakeGit = path.join(tempDir, binaryName);
+      fs.copyFileSync(process.execPath, fakeGit);
+      if (process.platform !== 'win32') {
+        fs.chmodSync(fakeGit, 0o755);
+      }
+
+      // 2. Crear script auxiliar controlado que permanece bloqueado esperando 60 segundos.
+      // Cuando execFileSync('git', ['rev-parse', 'HEAD']) invoque el ejecutable auxiliar con cwd: tempDir,
+      // Node ejecutará este archivo 'rev-parse'. Si el proceso terminara normalmente (antes del timeout),
+      // tardaría 60 segundos, garantizando que una terminación normal antes del timeout no ocurra.
+      const blockingScript = path.join(tempDir, 'rev-parse');
+      fs.writeFileSync(blockingScript, 'setTimeout(() => {}, 60000);\n');
+      if (process.platform !== 'win32') {
+        fs.chmodSync(blockingScript, 0o755);
+      }
+
+      // 3. Invocar la función gitExec() real pasando opciones aisladas con timeout estricto de 100ms.
+      // Se aísla el PATH anteponiendo tempDir para resolver el ejecutable auxiliar controlado.
+      const resTimeout = gitExec(['rev-parse', 'HEAD'], {
+        cwd: tempDir,
+        env: { ...process.env, PATH: tempDir + path.delimiter + (process.env.PATH || '') },
+        timeout: 100
+      });
+
+      // 4. Validaciones obligatorias de seguridad
+      assert.strictEqual(resTimeout.ok, false, 'La ejecución interrumpida por timeout debe reportar ok: false');
+      assert.strictEqual(resTimeout.exitCode, -1, 'El timeout debe reportar exitCode: -1 (excepción de lanzamiento/ejecución)');
+      assert.notStrictEqual(resTimeout.exitCode, 1, 'Timeout NUNCA debe convertirse en código legítimo 1');
+      assert(resTimeout.error, 'Debe registrarse el error capturado en el objeto de resultado');
+
+      // Comprobar error de timeout o terminación por señal
+      const isTimeoutOrSignal = resTimeout.error.code === 'ETIMEDOUT' || resTimeout.error.signal === 'SIGTERM';
+      assert.strictEqual(isTimeoutOrSignal, true, 'El error debe reportar ETIMEDOUT o terminación por señal SIGTERM');
+      assert.strictEqual(resTimeout.error.status, null, 'El proceso interrumpido por timeout no debe reportar status numérico');
+      assert(resTimeout.stderr.includes('ETIMEDOUT') || resTimeout.stderr.includes('SIGTERM') || resTimeout.stderr.includes('timed out'));
+
+      console.log('  ✔ gitExec() real clasifica timeout como error de ejecución con exitCode -1.');
+    } finally {
+      // 5. Limpieza garantizada de recursos temporales fuera del repositorio
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 
   console.log('[52/54] Código real 1: ejecución legítima de Git conserva código 1 y no se transforma en -1');
