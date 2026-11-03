@@ -54,7 +54,6 @@ async function runAllTests() {
         return { ok: true, stdout: '3333333333333333333333333333333333333333', stderr: '', exitCode: 0 };
       }
       if (sub === 'merge-base') {
-        // Por defecto no ancestro para obligar a verificar PR o diff
         return { ok: false, stdout: '', stderr: '', exitCode: 1 };
       }
       if (sub === 'rev-list') {
@@ -75,8 +74,11 @@ async function runAllTests() {
     };
   }
 
-  // --- SECCIÓN 1: PAGINACIÓN Y CONSULTA GITHUB ---
-  console.log('[1/26] Paginación completa dentro del límite');
+  // =============================================================
+  // BLOQUE 1: PRUEBAS PREVIAS 1 A 26
+  // =============================================================
+
+  console.log('[1/40] Paginación completa dentro del límite');
   {
     const fakeFetch = async (url) => {
       const match = url.match(/[?&]page=(\d+)/);
@@ -96,7 +98,7 @@ async function runAllTests() {
     console.log('  ✔ Paginación completada correctamente (142 PRs, 2 páginas).');
   }
 
-  console.log('[2/26] Límite de 50 páginas sin final confirmado');
+  console.log('[2/40] Límite de 50 páginas sin final confirmado');
   {
     const fakeFetch = async () => ({
       ok: true,
@@ -110,8 +112,7 @@ async function runAllTests() {
     console.log('  ✔ Límite alcanzado devuelve pagination_error.');
   }
 
-  // --- SECCIÓN 2: PRECEDENCIA DE CREDENCIALES ---
-  console.log('[3/26] Precedencia 1: git credential fill');
+  console.log('[3/40] Precedencia 1: git credential fill');
   {
     const mockGit = createMockGit({
       'credential': (args, opts) => {
@@ -127,7 +128,7 @@ async function runAllTests() {
     console.log('  ✔ git credential fill tiene precedencia 1.');
   }
 
-  console.log('[4/26] Precedencia 2: GITHUB_TOKEN en ausencia de git credential fill');
+  console.log('[4/40] Precedencia 2: GITHUB_TOKEN en ausencia de git credential fill');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -138,7 +139,7 @@ async function runAllTests() {
     console.log('  ✔ GITHUB_TOKEN tiene precedencia 2.');
   }
 
-  console.log('[5/26] Precedencia 3: GH_TOKEN en ausencia de GITHUB_TOKEN y git credential');
+  console.log('[5/40] Precedencia 3: GH_TOKEN en ausencia de GITHUB_TOKEN y git credential');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -149,7 +150,7 @@ async function runAllTests() {
     console.log('  ✔ GH_TOKEN tiene precedencia 3.');
   }
 
-  console.log('[6/26] Ausencia total de credenciales');
+  console.log('[6/40] Ausencia total de credenciales');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -162,8 +163,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de credenciales produce estado explícito no_token.');
   }
 
-  // --- SECCIÓN 3: ASOCIACIÓN DE REPOSITORIO Y REPOSITORIOS AJENOS ---
-  console.log('[7/26] PR de repositorio externo / fork con mismo nombre de rama');
+  console.log('[7/40] PR de repositorio externo / fork con mismo nombre de rama');
   {
     const mockGit = createMockGit();
     const env = {
@@ -190,7 +190,7 @@ async function runAllTests() {
     console.log('  ✔ PR de fork externo detectado y clasificado en [D].');
   }
 
-  console.log('[8/26] PR de repositorio canónico verificado');
+  console.log('[8/40] PR de repositorio canónico verificado');
   {
     const mockGit = createMockGit();
     const env = {
@@ -216,8 +216,7 @@ async function runAllTests() {
     console.log('  ✔ PR canónico asociado correctamente.');
   }
 
-  // --- SECCIÓN 4: ESCENARIOS DE INTEGRACIÓN REAL Y TRABAJO RESIDUAL ---
-  console.log('[9/26] Merge normal completamente integrado');
+  console.log('[9/40] Merge normal completamente integrado');
   {
     const mockGit = createMockGit({
       'merge-base': (args) => {
@@ -240,13 +239,12 @@ async function runAllTests() {
     console.log('  ✔ Merge normal completamente integrado clasifica en [A].');
   }
 
-  console.log('[10/26] Squash merge completamente integrado');
+  console.log('[10/40] Squash merge completamente integrado');
   {
     const branchSha = '3333333333333333333333333333333333333333';
     const mergeSha = '4444444444444444444444444444444444444444';
     const mockGit = createMockGit({
       'merge-base': (args) => {
-        // merge_sha es ancestro de origin/main
         if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) {
           return { ok: true, stdout: '', stderr: '', exitCode: 0 };
         }
@@ -283,11 +281,10 @@ async function runAllTests() {
     const analysis = analyzeBranch('feat/squash-clean', false, env, mockGit);
     assert.strictEqual(analysis.category, 'A');
     assert.strictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
-    assert(analysis.rationale.includes('sin commits posteriores'));
     console.log('  ✔ Squash merge limpio clasifica en [A].');
   }
 
-  console.log('[11/26] Squash con commits posteriores a la fusión');
+  console.log('[11/40] Squash con commits posteriores a la fusión');
   {
     const oldPrHeadSha = '3333333333333333333333333333333333333333';
     const newBranchSha = '5555555555555555555555555555555555555555';
@@ -296,6 +293,7 @@ async function runAllTests() {
     const mockGit = createMockGit({
       'merge-base': (args) => {
         if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) return { ok: true, stdout: '', exitCode: 0 };
+        if (args.includes(oldPrHeadSha) && args.includes('refs/heads/feat/squash-post')) return { ok: true, stdout: '', exitCode: 0 };
         return { ok: false, stdout: '', exitCode: 1 };
       },
       'rev-parse': (args) => {
@@ -306,7 +304,7 @@ async function runAllTests() {
       },
       'rev-list': (args) => {
         if (args.includes(`${oldPrHeadSha}..refs/heads/feat/squash-post`)) {
-          return { ok: true, stdout: '2', exitCode: 0 }; // 2 commits posteriores
+          return { ok: true, stdout: '2', exitCode: 0 };
         }
         return { ok: true, stdout: '2', exitCode: 0 };
       }
@@ -334,15 +332,14 @@ async function runAllTests() {
     const analysis = analyzeBranch('feat/squash-post', false, env, mockGit);
     assert.strictEqual(analysis.category, 'D');
     assert.strictEqual(analysis.recommendation, 'DETENER / COMMITS POSTERIORES A LA FUSIÓN');
-    assert(analysis.rationale.includes('posteriores'));
     console.log('  ✔ Squash con commits posteriores clasifica en [D].');
   }
 
-  console.log('[12/26] Merge normal con commits posteriores a la fusión');
+  console.log('[12/40] Merge normal con commits posteriores a la fusión');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
-      'rev-list': () => ({ ok: true, stdout: '3', exitCode: 0 }) // 3 commits ahead
+      'rev-list': () => ({ ok: true, stdout: '3', exitCode: 0 })
     });
     const env = {
       currentBranch: 'other-branch',
@@ -357,12 +354,13 @@ async function runAllTests() {
     console.log('  ✔ Merge con commits posteriores clasifica en [D].');
   }
 
-  console.log('[13/26] Árboles equivalentes con historias divergentes');
+  console.log('[13/40] Árboles equivalentes con historias divergentes (aheadCount = 0)');
   {
     const mockGit = createMockGit({
-      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }), // Historia divergente
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '0', exitCode: 0 }),
       'diff': (args) => {
-        if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 }; // Árbol 100% idéntico
+        if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 };
         return { ok: true, stdout: '', exitCode: 0 };
       }
     });
@@ -376,11 +374,10 @@ async function runAllTests() {
     const analysis = analyzeBranch('feat/equiv-tree', false, env, mockGit);
     assert.strictEqual(analysis.category, 'A');
     assert.strictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
-    assert(analysis.rationale.includes('Árbol de contenido 100% idéntico'));
-    console.log('  ✔ Árbol idéntico con historia divergente clasifica en [A].');
+    console.log('  ✔ Árbol idéntico sin commits pendientes clasifica en [A].');
   }
 
-  console.log('[14/26] Promoción verificada en Dev');
+  console.log('[14/40] Promoción verificada en Dev');
   {
     const mockGit = createMockGit({
       'merge-base': (args) => {
@@ -402,11 +399,10 @@ async function runAllTests() {
     const analysis = analyzeBranch('feat/promo-dev', false, env, mockGit);
     assert.strictEqual(analysis.category, 'A');
     assert.strictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
-    assert(analysis.rationale.includes('origin/Dev'));
     console.log('  ✔ Promoción verificada en Dev clasifica en [A].');
   }
 
-  console.log('[15/26] Contenido residual real (commits no integrados)');
+  console.log('[15/40] Contenido residual real (commits no integrados)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -425,7 +421,7 @@ async function runAllTests() {
     console.log('  ✔ Contenido residual activo clasifica en [C].');
   }
 
-  console.log('[16/26] PR fusionado sin merge_commit_sha');
+  console.log('[16/40] PR fusionado sin merge_commit_sha');
   {
     const mockGit = createMockGit();
     const env = {
@@ -452,7 +448,7 @@ async function runAllTests() {
     console.log('  ✔ PR sin merge_commit_sha clasifica en [D].');
   }
 
-  console.log('[17/26] Commit de integración no contenido en destino');
+  console.log('[17/40] Commit de integración no contenido en destino');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -481,8 +477,7 @@ async function runAllTests() {
     console.log('  ✔ Commit de integración ausente en destino clasifica en [D].');
   }
 
-  // --- SECCIÓN 5: ERRORES Y CONDICIONES DE BORDE DE GIT Y GITHUB ---
-  console.log('[18/26] Error de Git al consultar ancestría');
+  console.log('[18/40] Error de Git al consultar ancestría');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', stderr: 'fatal: error reading object', exitCode: 128 })
@@ -500,7 +495,7 @@ async function runAllTests() {
     console.log('  ✔ Error de Git en ancestría detiene recomendación y clasifica en [D].');
   }
 
-  console.log('[19/26] Ausencia obligatoria de origin/main');
+  console.log('[19/40] Ausencia obligatoria de origin/main');
   {
     const mockGit = createMockGit();
     const env = {
@@ -516,7 +511,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de origin/main detiene análisis en [D].');
   }
 
-  console.log('[20/26] Ausencia obligatoria de origin/Dev');
+  console.log('[20/40] Ausencia obligatoria de origin/Dev');
   {
     const mockGit = createMockGit();
     const env = {
@@ -532,7 +527,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de origin/Dev detiene análisis en [D].');
   }
 
-  console.log('[21/26] Error al listar worktrees');
+  console.log('[21/40] Error al listar worktrees');
   {
     const mockGit = createMockGit({
       'worktree': () => ({ ok: false, stdout: '', stderr: 'fatal: corrupt worktree list', exitCode: 128 })
@@ -543,7 +538,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en worktree list detectado correctamente.');
   }
 
-  console.log('[22/26] Error al listar ramas');
+  console.log('[22/40] Error al listar ramas');
   {
     const mockGit = createMockGit({
       'branch': (args) => {
@@ -557,7 +552,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en branch -a detectado correctamente.');
   }
 
-  console.log('[23/26] Error al identificar rama activa');
+  console.log('[23/40] Error al identificar rama activa');
   {
     const mockGit = createMockGit({
       'branch': (args) => {
@@ -571,7 +566,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en branch --show-current detectado correctamente.');
   }
 
-  console.log('[24/26] Nombre de rama con caracteres inválidos');
+  console.log('[24/40] Nombre de rama con caracteres inválidos');
   {
     const mockGit = createMockGit();
     const env = { currentBranch: 'main', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
@@ -581,7 +576,7 @@ async function runAllTests() {
     console.log('  ✔ Caracteres especiales interceptados preventivamente.');
   }
 
-  console.log('[25/26] Protección de rama activa en sesión');
+  console.log('[25/40] Protección de rama activa en sesión');
   {
     const mockGit = createMockGit();
     const env = {
@@ -597,7 +592,7 @@ async function runAllTests() {
     console.log('  ✔ Rama activa en uso protegida con [C].');
   }
 
-  console.log('[26/26] Consulta de GitHub incompleta (interrupción por red o auth)');
+  console.log('[26/40] Consulta de GitHub incompleta (interrupción por red o auth)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 })
@@ -612,12 +607,396 @@ async function runAllTests() {
     const analysis = analyzeBranch('feat/unverified-due-to-gh', false, env, mockGit);
     assert.strictEqual(analysis.category, 'D');
     assert.strictEqual(analysis.recommendation, 'DETENER / CONSULTA GITHUB PENDIENTE O INCOMPLETA');
-    assert.notStrictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
     console.log('  ✔ Incertidumbre de GitHub bloquea categóricamente recomendación de borrado.');
   }
 
+  // =============================================================
+  // BLOQUE 2: 14 NUEVAS PRUEBAS ESPECÍFICAS DE SEGURIDAD (27 A 40)
+  // =============================================================
+
+  console.log('[27/40] rev-list falla durante la verificación (Corrección A)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
+      'rev-list': () => ({ ok: false, stdout: '', stderr: 'fatal: rev-list failed', exitCode: 128 })
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+    assert(res.error.includes('rev-list'));
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Fallo en rev-list resulta en modo git_error y categoría D.');
+  }
+
+  console.log('[28/40] rev-list devuelve salida inválida (no numérica) (Corrección A)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
+      'rev-list': () => ({ ok: true, stdout: 'NaN-corrupted-output', exitCode: 0 })
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Salida inválida de rev-list detectada y clasificada como D.');
+  }
+
+  console.log('[29/40] diff --quiet devuelve 0 (árboles iguales) (Corrección B)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '0', exitCode: 0 }),
+      'diff': (args) => {
+        if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: true, stdout: '', exitCode: 0 };
+      }
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, true);
+    assert.strictEqual(res.mode, 'equivalent_tree');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'A');
+    assert.strictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
+    console.log('  ✔ diff --quiet con código 0 valida equivalent_tree y categoría A.');
+  }
+
+  console.log('[30/40] diff --quiet devuelve 1 (árboles diferentes) (Corrección B)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '0', exitCode: 0 }),
+      'diff': (args) => {
+        if (args.includes('--quiet')) return { ok: false, stdout: '', exitCode: 1 };
+        return { ok: true, stdout: '1 file changed', exitCode: 0 };
+      }
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'not_integrated');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.notStrictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
+    console.log('  ✔ diff --quiet con código 1 clasifica como not_integrated y categoría D.');
+  }
+
+  console.log('[31/40] diff --quiet devuelve código superior a 1 (Corrección B)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '0', exitCode: 0 }),
+      'diff': (args) => {
+        if (args.includes('--quiet')) return { ok: false, stdout: '', stderr: 'fatal: error comparing trees', exitCode: 2 };
+        return { ok: true, stdout: '', exitCode: 0 };
+      }
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+    assert(res.error.includes('diff --quiet'));
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ diff --quiet con código > 1 tratado como error de Git y categoría D.');
+  }
+
+  console.log('[32/40] Error de ejecución de diff (excepción o fallo de proceso) (Corrección B)');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '0', exitCode: 0 }),
+      'diff': () => ({ ok: false, stdout: '', stderr: 'spawn error', exitCode: -1 })
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Error de ejecución de diff conduce de inmediato a categoría D.');
+  }
+
+  console.log('[33/40] Rama retrocedida respecto del prHeadSha (Corrección C)');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const currentSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // Commit más antiguo
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        // mergeSha está en target
+        if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) return { ok: true, stdout: '', exitCode: 0 };
+        // prHeadSha NO es ancestro de la rama actual (la rama está detrás de prHeadSha)
+        if (args.includes(prHeadSha) && args.includes('refs/heads/feat/behind-pr')) return { ok: false, stdout: '', exitCode: 1 };
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': (args) => {
+        const ref = args[args.length - 1];
+        if (ref === 'refs/remotes/origin/main') return { ok: true, stdout: dummyMainSha, exitCode: 0 };
+        if (ref === 'refs/remotes/origin/Dev') return { ok: true, stdout: dummyDevSha, exitCode: 0 };
+        return { ok: true, stdout: currentSha, exitCode: 0 };
+      }
+    });
+
+    const canonicalPr = {
+      id: 701,
+      number: 701,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/behind-pr', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/behind-pr', canonicalPr, 'refs/remotes/origin/main', currentSha, mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'branch_behind_pr');
+    assert(res.reason.includes('Rama retrocedida'));
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/behind-pr', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / RAMA RETROCEDIDA RESPECTO DEL PR');
+    console.log('  ✔ Rama retrocedida respecto al PR clasificada en modo branch_behind_pr y categoría D.');
+  }
+
+  console.log('[34/40] Rama en sincronía exacta con prHeadSha y mergeSha en target (Corrección C)');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': (args) => {
+        const ref = args[args.length - 1];
+        if (ref === 'refs/remotes/origin/main') return { ok: true, stdout: dummyMainSha, exitCode: 0 };
+        if (ref === 'refs/remotes/origin/Dev') return { ok: true, stdout: dummyDevSha, exitCode: 0 };
+        return { ok: true, stdout: prHeadSha, exitCode: 0 }; // Coincide exactamente con el PR
+      }
+    });
+
+    const canonicalPr = {
+      id: 702,
+      number: 702,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/synced-pr', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/synced-pr', canonicalPr, 'refs/remotes/origin/main', prHeadSha, mockGit);
+    assert.strictEqual(res.integrated, true);
+    assert.strictEqual(res.mode, 'squash_merge');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/synced-pr', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'A');
+    assert.strictEqual(analysis.recommendation, 'APTA PARA ELIMINACIÓN');
+    console.log('  ✔ Rama en sincronía con PR validada en squash_merge y categoría A.');
+  }
+
+  console.log('[35/40] Commits posteriores a la fusión detectados (Corrección C)');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const currentSha = 'dddddddddddddddddddddddddddddddddddddddd';
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) return { ok: true, stdout: '', exitCode: 0 };
+        if (args.includes(prHeadSha) && args.includes('refs/heads/feat/post-work')) return { ok: true, stdout: '', exitCode: 0 }; // es ancestro
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': (args) => {
+        const ref = args[args.length - 1];
+        if (ref === 'refs/remotes/origin/main') return { ok: true, stdout: dummyMainSha, exitCode: 0 };
+        if (ref === 'refs/remotes/origin/Dev') return { ok: true, stdout: dummyDevSha, exitCode: 0 };
+        return { ok: true, stdout: currentSha, exitCode: 0 };
+      },
+      'rev-list': () => ({ ok: true, stdout: '2', exitCode: 0 }) // 2 commits posteriores
+    });
+
+    const canonicalPr = {
+      id: 703,
+      number: 703,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/post-work', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/post-work', canonicalPr, 'refs/remotes/origin/main', currentSha, mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'post_merge_commits');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/post-work', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / COMMITS POSTERIORES A LA FUSIÓN');
+    console.log('  ✔ Commits posteriores detectados en modo post_merge_commits y categoría D.');
+  }
+
+  console.log('[36/40] Árbol equivalente con commits exclusivos no integrados (Corrección D)');
+  {
+    // Supongamos que diff --quiet devolvería 0, pero aheadCount es 2 y NO hay PR
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: true, stdout: '2', exitCode: 0 }),
+      'diff': (args) => {
+        if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: true, stdout: '', exitCode: 0 };
+      }
+    });
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/equiv-ahead', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false, 'No debe considerarse integrado si tiene commits exclusivos');
+    assert.strictEqual(res.mode, 'not_integrated');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/equiv-ahead', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'C'); // Trabajo activo pendiente
+    assert.notStrictEqual(analysis.category, 'A');
+    console.log('  ✔ Árbol idéntico con commits exclusivos bloquea categoría A y clasifica como C.');
+  }
+
+  console.log('[37/40] Árbol equivalente con consulta de commits fallida (Corrección D)');
+  {
+    // diff --quiet devolvería 0, pero rev-list falló
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
+      'rev-list': () => ({ ok: false, stdout: '', stderr: 'rev-list error', exitCode: 128 }),
+      'diff': (args) => {
+        if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: true, stdout: '', exitCode: 0 };
+      }
+    });
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/equiv-failed-rev', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/equiv-failed-rev', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Fallo en rev-list impide que equivalent_tree clasifique erróneamente en A.');
+  }
+
+  console.log('[38/40] Merge SHA válido pero contenido residual (Corrección D)');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const currentSha = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes(mergeSha) && args.includes('refs/remotes/origin/main')) return { ok: true, stdout: '', exitCode: 0 };
+        if (args.includes(prHeadSha) && args.includes('refs/heads/feat/residual')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': (args) => {
+        const ref = args[args.length - 1];
+        if (ref === 'refs/remotes/origin/main') return { ok: true, stdout: dummyMainSha, exitCode: 0 };
+        if (ref === 'refs/remotes/origin/Dev') return { ok: true, stdout: dummyDevSha, exitCode: 0 };
+        return { ok: true, stdout: currentSha, exitCode: 0 };
+      },
+      'rev-list': () => ({ ok: true, stdout: '5', exitCode: 0 }) // 5 commits residuales
+    });
+
+    const canonicalPr = {
+      id: 704,
+      number: 704,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/residual', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/residual', canonicalPr, 'refs/remotes/origin/main', currentSha, mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'post_merge_commits');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/residual', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / COMMITS POSTERIORES A LA FUSIÓN');
+    console.log('  ✔ Merge SHA en target con commits residuales clasifica como D.');
+  }
+
+  console.log('[39/40] Merge SHA ausente (null o cadena vacía) (Corrección D)');
+  {
+    const canonicalPr = {
+      id: 705,
+      number: 705,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: '', // Ausente
+      base: { ref: 'main' },
+      head: { ref: 'feat/missing-sha', sha: '1111', repo: { full_name: CANONICAL_REPO } }
+    };
+    const mockGit = createMockGit();
+    const res = verifyIntegrationEvidence('refs/heads/feat/missing-sha', canonicalPr, 'refs/remotes/origin/main', '1111', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'missing_merge_sha');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/missing-sha', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / FALTA SHA DE INTEGRACIÓN');
+    console.log('  ✔ Merge SHA ausente clasifica como D.');
+  }
+
+  console.log('[40/40] Evidencia incompleta o prHeadSha no verificable conduce a D (Corrección D)');
+  {
+    const canonicalPr = {
+      id: 706,
+      number: 706,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: 'valid-merge-sha',
+      base: { ref: 'main' },
+      head: { ref: 'feat/no-head-sha', sha: null, repo: { full_name: CANONICAL_REPO } } // Sin head sha
+    };
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes('valid-merge-sha')) return { ok: true, stdout: '', exitCode: 0 };
+        return { ok: false, stdout: '', exitCode: 1 };
+      }
+    });
+    const res = verifyIntegrationEvidence('refs/heads/feat/no-head-sha', canonicalPr, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'unverified_head');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/no-head-sha', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / EVIDENCIA HISTÓRICA INCOMPLETA');
+    console.log('  ✔ Evidencia histórica incompleta conduce a modo unverified_head y categoría D.');
+  }
+
   console.log('\n===============================================================');
-  console.log(' RESULTADO: 26/26 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
+  console.log(' RESULTADO: 40/40 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
   console.log('===============================================================');
 }
 

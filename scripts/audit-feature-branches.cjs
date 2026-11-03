@@ -93,7 +93,7 @@ function gitExec(args, options = {}) {
 
 /**
  * Extrae credenciales de GitHub de forma segura.
- * Orden de precedencia estricto (Corrección B):
+ * Orden de precedencia estricto:
  * 1. Almacén de credenciales de Git (git credential fill para host=github.com)
  * 2. Variable de entorno GITHUB_TOKEN
  * 3. Variable de entorno GH_TOKEN
@@ -282,36 +282,49 @@ async function fetchAllPRs(token, maxPages = 50, customFetch = (typeof fetch !==
 
 /**
  * Evalúa fehacientemente la evidencia de integración del contenido de una rama
- * contra un puntero canónico de destino (Corrección A).
+ * contra un puntero canónico de destino.
  *
  * Distingue:
  * - normal_merge: merge commit o ancestría directa sin commits posteriores.
- * - squash_merge: PR squasheado verificado en destino sin commits posteriores.
- * - equivalent_tree: árbol idéntico al destino (ej. rebase o cherry-picks equivalentes).
+ * - squash_merge: PR squasheado verificado en destino sin commits posteriores ni retrocesos.
+ * - equivalent_tree: árbol idéntico al destino sin commits exclusivos pendientes.
  * - post_merge_commits: commits o modificaciones agregadas después de la fusión.
+ * - branch_behind_pr: rama retrocedida o divergente que no contiene el commit fusionado del PR.
  * - merge_sha_not_in_target: el commit de integración no está en la historia actual del destino.
- * - unverified_head / git_error: fallos de verificación o consultas erróneas.
+ * - missing_merge_sha / unverified_head / git_error: evidencia incompleta o consultas fallidas.
  */
 function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, currentSha, customGitExec = gitExec) {
   // 1. Comprobar ancestría directa en el destino (Merge normal o fast-forward)
   const directAncRes = customGitExec(['merge-base', '--is-ancestor', fullRef, targetRef]);
   if (directAncRes.exitCode === 0) {
     const aheadRes = customGitExec(['rev-list', '--count', `${targetRef}..${fullRef}`]);
-    if (aheadRes.ok) {
-      const aheadCount = parseInt(aheadRes.stdout, 10);
-      if (aheadCount === 0) {
-        return {
-          integrated: true,
-          mode: 'normal_merge',
-          reason: `Integración completa por ancestría directa verificada en ${targetRef}. Sin commits residuales.`
-        };
-      } else {
-        return {
-          integrated: false,
-          mode: 'post_merge_commits',
-          reason: `La rama está en ancestría de ${targetRef} pero contiene ${aheadCount} commit(s) exclusivos posteriores no integrados.`
-        };
-      }
+    if (!aheadRes.ok) {
+      return {
+        integrated: false,
+        mode: 'git_error',
+        error: `Fallo al contar commits en rev-list (${targetRef}..${fullRef}): ${aheadRes.stderr || 'error de ejecución'}`
+      };
+    }
+    const aheadCount = parseInt(aheadRes.stdout, 10);
+    if (isNaN(aheadCount)) {
+      return {
+        integrated: false,
+        mode: 'git_error',
+        error: `Salida inválida de rev-list (${aheadRes.stdout}) al consultar ${targetRef}..${fullRef}`
+      };
+    }
+    if (aheadCount === 0) {
+      return {
+        integrated: true,
+        mode: 'normal_merge',
+        reason: `Integración completa por ancestría directa verificada en ${targetRef}. Sin commits residuales.`
+      };
+    } else {
+      return {
+        integrated: false,
+        mode: 'post_merge_commits',
+        reason: `La rama está en ancestría de ${targetRef} pero contiene ${aheadCount} commit(s) exclusivos posteriores no integrados.`
+      };
     }
   } else if (directAncRes.exitCode !== 1) {
     return {
@@ -321,92 +334,149 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
     };
   }
 
-  // 2. Si no es ancestro directo, verificar si los árboles son completamente idénticos (historias divergentes)
-  const diffQuietRes = customGitExec(['diff', '--quiet', targetRef, fullRef]);
-  if (diffQuietRes.exitCode === 0) {
-    const aheadRes = customGitExec(['rev-list', '--count', `${targetRef}..${fullRef}`]);
-    const aheadCount = aheadRes.ok ? parseInt(aheadRes.stdout, 10) : 0;
-    if (aheadCount === 0 || canonicalMergedPr) {
+  // 2. Si no es ancestro directo, verificar si hay un PR canónico fusionado (ej. Squash merge)
+  if (canonicalMergedPr) {
+    // 2a. Validar merge_commit_sha
+    const mergeSha = canonicalMergedPr.merge_commit_sha;
+    if (!mergeSha || typeof mergeSha !== 'string' || mergeSha.trim().length === 0) {
       return {
-        integrated: true,
-        mode: 'equivalent_tree',
-        reason: `Árbol de contenido 100% idéntico al destino ${targetRef} (equivalencia comprobada sin diferencias residuales).`
+        integrated: false,
+        mode: 'missing_merge_sha',
+        reason: `PR #${canonicalMergedPr.number} figura fusionado pero carece de merge_commit_sha en GitHub.`
       };
     }
-  }
 
-  // 3. Si no es ancestro directo ni árbol idéntico, verificar integración mediante PR canónico (ej. Squash merge)
-  if (!canonicalMergedPr) {
-    return {
-      integrated: false,
-      mode: 'not_integrated',
-      reason: `La rama no está en ancestría de ${targetRef}, difiere en contenido y no posee PR canónico fusionado hacia ese destino.`
-    };
-  }
+    // 2b. Validar que merge_commit_sha esté contenido en targetRef
+    const mergeShaAncRes = customGitExec(['merge-base', '--is-ancestor', mergeSha.trim(), targetRef]);
+    if (mergeShaAncRes.exitCode === 1) {
+      return {
+        integrated: false,
+        mode: 'merge_sha_not_in_target',
+        reason: `El commit de integración ${mergeSha.trim().substring(0, 7)} del PR #${canonicalMergedPr.number} no está contenido en la historia actual de ${targetRef}.`
+      };
+    }
+    if (mergeShaAncRes.exitCode !== 0) {
+      return {
+        integrated: false,
+        mode: 'git_error',
+        error: `Error de Git al verificar ancestría de ${mergeSha.trim().substring(0, 7)} en ${targetRef}: ${mergeShaAncRes.stderr}`
+      };
+    }
 
-  // 3a. Validar merge_commit_sha
-  const mergeSha = canonicalMergedPr.merge_commit_sha;
-  if (!mergeSha || typeof mergeSha !== 'string' || mergeSha.trim().length === 0) {
-    return {
-      integrated: false,
-      mode: 'missing_merge_sha',
-      reason: `PR #${canonicalMergedPr.number} figura fusionado pero carece de merge_commit_sha en GitHub.`
-    };
-  }
+    // 2c. Validar prHeadSha y verificar que la rama no esté retrocedida ni tenga commits posteriores
+    const prHeadSha = canonicalMergedPr.head ? canonicalMergedPr.head.sha : null;
+    if (!prHeadSha || typeof prHeadSha !== 'string' || prHeadSha.trim().length === 0) {
+      return {
+        integrated: false,
+        mode: 'unverified_head',
+        reason: `PR #${canonicalMergedPr.number} no suministra pr.head.sha válido para verificar la integración de la rama.`
+      };
+    }
 
-  // 3b. Validar que merge_commit_sha esté contenido en targetRef
-  const mergeShaAncRes = customGitExec(['merge-base', '--is-ancestor', mergeSha.trim(), targetRef]);
-  if (mergeShaAncRes.exitCode === 1) {
-    return {
-      integrated: false,
-      mode: 'merge_sha_not_in_target',
-      reason: `El commit de integración ${mergeSha.trim().substring(0, 7)} del PR #${canonicalMergedPr.number} no está contenido en la historia actual de ${targetRef}.`
-    };
-  }
-  if (mergeShaAncRes.exitCode !== 0) {
-    return {
-      integrated: false,
-      mode: 'git_error',
-      error: `Error de Git al verificar ancestría de ${mergeSha.trim().substring(0, 7)} en ${targetRef}: ${mergeShaAncRes.stderr}`
-    };
-  }
-
-  // 3c. Validar commits posteriores en la rama respecto al commit que fue fusionado en el PR
-  const prHeadSha = canonicalMergedPr.head ? canonicalMergedPr.head.sha : null;
-  if (prHeadSha) {
-    if (currentSha !== prHeadSha) {
-      const postCommitsRes = customGitExec(['rev-list', '--count', `${prHeadSha}..${fullRef}`]);
-      if (postCommitsRes.ok) {
-        const postCount = parseInt(postCommitsRes.stdout, 10);
-        if (postCount > 0) {
-          return {
-            integrated: false,
-            mode: 'post_merge_commits',
-            reason: `La rama contiene ${postCount} commit(s) posteriores a la fusión del PR #${canonicalMergedPr.number} (${prHeadSha.substring(0, 7)}..${currentSha.substring(0, 7)}). Trabajo residual no integrado.`
-          };
-        }
-      } else {
+    // Comprobar si currentSha es idéntico a prHeadSha
+    if (currentSha !== prHeadSha.trim()) {
+      // Si difiere, comprobar si prHeadSha es ancestro de fullRef
+      const headAncRes = customGitExec(['merge-base', '--is-ancestor', prHeadSha.trim(), fullRef]);
+      if (headAncRes.exitCode === 1) {
+        // prHeadSha NO es ancestro de la rama actual: rama retrocedida o divergente
         return {
           integrated: false,
-          mode: 'unverified_head',
-          reason: `No se pudo verificar la relación histórica entre el commit del PR (${prHeadSha.substring(0, 7)}) y la rama actual (${currentSha.substring(0, 7)}): ${postCommitsRes.stderr}`
+          mode: 'branch_behind_pr',
+          reason: `La rama actual (${currentSha.substring(0, 7)}) no contiene el commit fusionado del PR #${canonicalMergedPr.number} (${prHeadSha.trim().substring(0, 7)}). Rama retrocedida o divergente respecto del PR.`
+        };
+      }
+      if (headAncRes.exitCode !== 0) {
+        return {
+          integrated: false,
+          mode: 'git_error',
+          error: `Error de Git al verificar relación entre commit del PR (${prHeadSha.trim().substring(0, 7)}) y la rama (${currentSha.substring(0, 7)}): ${headAncRes.stderr}`
+        };
+      }
+
+      // prHeadSha es ancestro de fullRef: contar commits posteriores
+      const postCommitsRes = customGitExec(['rev-list', '--count', `${prHeadSha.trim()}..${fullRef}`]);
+      if (!postCommitsRes.ok) {
+        return {
+          integrated: false,
+          mode: 'git_error',
+          error: `Fallo al contar commits posteriores al PR (${prHeadSha.trim()}..${fullRef}): ${postCommitsRes.stderr}`
+        };
+      }
+      const postCount = parseInt(postCommitsRes.stdout, 10);
+      if (isNaN(postCount)) {
+        return {
+          integrated: false,
+          mode: 'git_error',
+          error: `Salida inválida de rev-list al contar commits posteriores: ${postCommitsRes.stdout}`
+        };
+      }
+      if (postCount > 0) {
+        return {
+          integrated: false,
+          mode: 'post_merge_commits',
+          reason: `La rama contiene ${postCount} commit(s) posteriores a la fusión del PR #${canonicalMergedPr.number} (${prHeadSha.trim().substring(0, 7)}..${currentSha.substring(0, 7)}). Trabajo residual no integrado.`
         };
       }
     }
 
-    // 3d. Confirmación de Squash merge exitoso sin trabajo residual
+    // Confirmación de integración limpia por squash merge
     return {
       integrated: true,
       mode: 'squash_merge',
-      reason: `PR #${canonicalMergedPr.number} fusionado hacia [${canonicalMergedPr.base.ref}] el ${canonicalMergedPr.merged_at}. Commit de integración (${mergeSha.trim().substring(0, 7)}) verificado en ${targetRef} sin commits posteriores a la fusión.`
+      reason: `PR #${canonicalMergedPr.number} fusionado hacia [${canonicalMergedPr.base.ref}] el ${canonicalMergedPr.merged_at}. Commit de integración (${mergeSha.trim().substring(0, 7)}) verificado en ${targetRef} y rama en sincronía exacta con el PR.`
     };
   }
 
-  return {
-    integrated: false,
-    mode: 'unverified_head',
-    reason: `PR #${canonicalMergedPr.number} no suministra pr.head.sha para descartar trabajo residual posterior.`
-  };
+  // 3. Si NO hay PR canónico fusionado, verificar ruta de árbol equivalente
+  // Primero consultar conteo de commits exclusivos
+  const aheadRes = customGitExec(['rev-list', '--count', `${targetRef}..${fullRef}`]);
+  if (!aheadRes.ok) {
+    return {
+      integrated: false,
+      mode: 'git_error',
+      error: `Fallo al consultar rev-list (${targetRef}..${fullRef}): ${aheadRes.stderr}`
+    };
+  }
+  const aheadCount = parseInt(aheadRes.stdout, 10);
+  if (isNaN(aheadCount)) {
+    return {
+      integrated: false,
+      mode: 'git_error',
+      error: `Salida inválida de rev-list (${aheadRes.stdout}) al consultar ${targetRef}..${fullRef}`
+    };
+  }
+
+  // Si tiene commits exclusivos sin PR asociado, no puede ser clasificado como integrado
+  if (aheadCount > 0) {
+    return {
+      integrated: false,
+      mode: 'not_integrated',
+      reason: `La rama contiene ${aheadCount} commit(s) no integrados en ${targetRef} y carece de PR canónico fusionado.`
+    };
+  }
+
+  // Si aheadCount === 0, comprobar diff --quiet contra el destino
+  const diffQuietRes = customGitExec(['diff', '--quiet', targetRef, fullRef]);
+  if (diffQuietRes.exitCode === 0) {
+    return {
+      integrated: true,
+      mode: 'equivalent_tree',
+      reason: `Árbol de contenido 100% idéntico al destino ${targetRef} y sin commits exclusivos pendientes (equivalencia comprobada).`
+    };
+  } else if (diffQuietRes.exitCode === 1) {
+    return {
+      integrated: false,
+      mode: 'not_integrated',
+      reason: `La rama difiere en contenido respecto de ${targetRef} y no tiene PR canónico fusionado.`
+    };
+  } else {
+    // exitCode > 1 o error de ejecución
+    return {
+      integrated: false,
+      mode: 'git_error',
+      error: `Error de Git al comparar árboles con diff --quiet (${targetRef} vs ${fullRef}): ${diffQuietRes.stderr || 'código ' + diffQuietRes.exitCode}`
+    };
+  }
 }
 
 /**
@@ -543,7 +613,11 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
   if (!gitQueryError) {
     const aheadMainRes = customGitExec(['rev-list', '--count', `${canonicalMainRef}..${fullRef}`]);
     if (aheadMainRes.ok) {
-      aheadMain = parseInt(aheadMainRes.stdout, 10);
+      const parsed = parseInt(aheadMainRes.stdout, 10);
+      aheadMain = isNaN(parsed) ? null : parsed;
+      if (aheadMain === null) {
+        gitQueryError = `Salida inválida en rev-list ${canonicalMainRef}: ${aheadMainRes.stdout}`;
+      }
     } else {
       gitQueryError = `Fallo en rev-list ${canonicalMainRef}: ${aheadMainRes.stderr}`;
     }
@@ -552,7 +626,11 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
   if (!gitQueryError) {
     const aheadDevRes = customGitExec(['rev-list', '--count', `${canonicalDevRef}..${fullRef}`]);
     if (aheadDevRes.ok) {
-      aheadDev = parseInt(aheadDevRes.stdout, 10);
+      const parsed = parseInt(aheadDevRes.stdout, 10);
+      aheadDev = isNaN(parsed) ? null : parsed;
+      if (aheadDev === null) {
+        gitQueryError = `Salida inválida en rev-list ${canonicalDevRef}: ${aheadDevRes.stdout}`;
+      }
     } else {
       gitQueryError = `Fallo en rev-list ${canonicalDevRef}: ${aheadDevRes.stderr}`;
     }
@@ -579,7 +657,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
   const openPr = canonicalRepoPrs.find(p => p.state === 'open');
   const closedUnmergedPr = canonicalRepoPrs.find(p => p.state === 'closed' && !p.merged_at);
 
-  // 6. Evidencia de integración de contenido (Corrección A)
+  // 6. Evidencia de integración de contenido
   const mainIntegration = verifyIntegrationEvidence(
     fullRef,
     canonicalMergedPr && canonicalMergedPr.base.ref === 'main' ? canonicalMergedPr : null,
@@ -641,6 +719,10 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
     category = 'D';
     recommendation = 'DETENER / COMMITS POSTERIORES A LA FUSIÓN';
     rationale = mainIntegration.mode === 'post_merge_commits' ? mainIntegration.reason : devIntegration.reason;
+  } else if (mainIntegration.mode === 'branch_behind_pr' || devIntegration.mode === 'branch_behind_pr') {
+    category = 'D';
+    recommendation = 'DETENER / RAMA RETROCEDIDA RESPECTO DEL PR';
+    rationale = mainIntegration.mode === 'branch_behind_pr' ? mainIntegration.reason : devIntegration.reason;
   } else if (mainIntegration.mode === 'missing_merge_sha' || devIntegration.mode === 'missing_merge_sha') {
     category = 'D';
     recommendation = 'DETENER / FALTA SHA DE INTEGRACIÓN';
