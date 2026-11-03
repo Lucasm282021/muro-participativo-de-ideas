@@ -61,14 +61,13 @@ npx supabase db push
 
 ### 3. Desplegar la aplicación
 
+Los cambios hacia `main` deben integrarse mediante Pull Request auditado y aprobado en GitHub, respetando las protecciones del repositorio:
+
 ```powershell
-git status
-git add <archivos-revisados>
-git commit -m "Descripción del cambio"
-git push origin main
+git push origin <rama-de-trabajo>
 ```
 
-Vercel crea un deployment desde GitHub. Revisar **Vercel → Deployments** y esperar el estado **Ready**. Para las ramas distintas de `main`, comprobar el Preview antes de integrar el cambio.
+Tras la aprobación del Pull Request y la verificación exitosa de las comprobaciones automatizadas (checks), ejecutar la fusión en GitHub. Vercel creará el despliegue de producción desde `main`. Revisar **Vercel → Deployments** y esperar el estado **Ready**. Para ramas previas o de desarrollo, comprobar el Preview antes de integrar el cambio.
 
 ## Comprobación posterior
 
@@ -93,3 +92,31 @@ No usar información personal real para las comprobaciones si una cuenta o activ
 ## Entorno local
 
 La preparación de Docker, URLs locales, Supabase Studio y la bandeja de email de prueba está en el [README](../README.md#preparar-el-entorno). Las cuentas locales y los datos locales son independientes de Production.
+
+---
+
+## Política permanente de cierre técnico de features y limpieza de ramas
+
+Ninguna funcionalidad o rama `feat/*` se considera completada con la mera aprobación o fusión del Pull Request. Una feature está formalmente cerrada cuando su integración y despliegue están verificados en destino (`main` o `Dev`), y todos sus artefactos temporales (ramas locales, ramas remotas y worktrees dedicados) han sido retirados de forma segura.
+
+### Configuración de GitHub
+El repositorio tiene habilitada la directiva `delete_branch_on_merge: true`. Al fusionar un Pull Request en GitHub, la rama remota (`origin/feat/*` o `origin/promo/*`) se elimina automáticamente en el servidor. Esto **no** elimina ramas locales ni worktrees en las estaciones de trabajo.
+
+### Procedimiento obligatorio de cierre técnico
+Tras la fusión e integración de una rama:
+1. **Verificación del PR:** Confirmar estado `closed` y `merged: true` en GitHub.
+2. **Identificación de la rama destino:** Confirmar si el destino es `main` o `Dev`.
+3. **Verificación de commits y contenido:**
+   - *Merge commit:* Comprobar ancestría directa con `git merge-base --is-ancestor <rama> <destino>`.
+   - *Squash and merge:* Comprobar el squash commit en la rama destino y que `git diff <rama> <destino>` no reporte cambios de la feature pendientes.
+   - *Promoción conjunta:* Comprobar que todos los archivos de la feature quedaron incorporados en la rama de promoción integrada.
+4. **Verificación de despliegue:** Confirmar estado `Ready` en Vercel para el commit resultante.
+5. **Comprobación de worktree limpio:** Verificar que el worktree de la feature no contenga modificaciones sin guardar (`git status --short` vacío) y que no existan procesos activos.
+6. **Retiro del worktree exclusivo:** Ejecutar `git worktree remove <ruta-worktree>`.
+7. **Eliminación segura de ramas:**
+   - Local: `git branch -d feat/<nombre>`.
+   - Remota (si no fue eliminada por GitHub): `git push origin --delete feat/<nombre>`.
+8. **Poda de referencias obsoletas:** Ejecutar `git fetch --prune origin`.
+9. **Registro formal:** Dejar constancia documental en el informe de cierre de la feature.
+
+Para más detalles operativos y resolución de casos especiales, consultar [docs/workflow-git.md](./workflow-git.md).
