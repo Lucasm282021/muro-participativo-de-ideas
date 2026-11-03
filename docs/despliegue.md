@@ -1,111 +1,108 @@
-﻿# Despliegue, Operación y Gestión de Entornos
+# Despliegue y operación
 
----
+## Topología actual
 
-## 1. Topología del Sistema y Servicios Conectados
+- El repositorio de GitHub conectado a Vercel es `Lucasm282021/muro-participativo-de-ideas`.
+- La rama `main` despliega a Production; los cambios en otras ramas pueden crear Preview Deployments.
+- Vercel ejecuta Next.js. La base de datos y Auth están en el proyecto Supabase de producción.
+- Las migraciones de Supabase se versionan en `supabase/migrations/`; el push del código a Vercel no aplica migraciones SQL automáticamente.
 
-- **Repositorio oficial en GitHub:** `Lucasm282021/muro-participativo-de-ideas`.
-- **Ramas:**
-  - `main`: Rama de producción (actualmente en commit `cd94282`).
-  - `Dev`: Rama activa de integración y desarrollo (actualmente en commit local `dbc2f35`).
-- **Plataforma de Hosting:** Vercel. Despliega automáticamente compilaciones desde GitHub.
-- **Base de datos e Identidad:** Proyecto gestionado en Supabase Cloud (PostgreSQL 15+, Auth, Realtime).
-- **Independencia operativa:** El despliegue de código en Vercel **no ejecuta migraciones SQL de forma automática**. Las migraciones deben gestionarse de manera independiente y controlada mediante Supabase CLI.
+El nombre y las cuentas de Vercel, GitHub y Supabase son servicios separados. El acceso a cada uno debe administrarse desde su proveedor. No guardes tokens de acceso en este repositorio.
 
----
+## Variables de entorno
 
-## 2. Discrepancia Crítica de Dominios de Producción
+Configurar en **Vercel → Project → Settings → Environment Variables** para Production y Preview:
 
-> [!WARNING]
-> **ESTADO: PENDIENTE DE CONFIRMACIÓN.**
-> La auditoría técnica identificó discrepancias respecto del dominio canónico de producción:
-> - **Dominio A:** `https://murocomun.vercel.app` (configurado en `.env.production`, scripts de pruebas y cabeceras de validación).
-> - **Dominio B:** `https://muro-participativo-de-ideas.vercel.app` (mencionado previamente en documentación histórica como `Site URL` de Auth).
-> - **URL de Preview activa:** `https://muro-participativo-de-ideas-aw6gfa7p9-kritio-systems.vercel.app` (asociada al scope institucional `kritio-systems` con autenticación SSO de Vercel).
->
-> **Regla operativa obligatoria:** Queda expresamente prohibido elegir o asumir uno de los dominios sin verificación previa directa en el panel de control de Vercel y en la configuración de URLs de Supabase Auth.
+| Variable | Valor | Alcance |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase conectado. | Público; debe corresponder al mismo entorno que la clave. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key del proyecto Supabase. | Pública; RLS debe proteger el acceso. |
 
----
+Las mismas variables se usan localmente en `.env.local`. `.env.example` muestra los nombres sin incluir credenciales reales. No copiar claves de otro proyecto ni subir `.env.local`. No agregar una clave `service_role` como `NEXT_PUBLIC_*`.
 
-## 3. Variables de Entorno Requeridas
+Al cambiar variables en Vercel, crear un nuevo deployment para que la compilación las reciba.
 
-Las siguientes variables deben estar configuradas en **Vercel → Project → Settings → Environment Variables** (para los entornos de *Production* y *Preview*):
+## Configuración de Supabase Auth
 
-| Variable | Tipo / Alcance | Propósito |
-| :--- | :--- | :--- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Pública (`NEXT_PUBLIC_*`) | URL del proyecto Supabase enlazado. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Pública (`NEXT_PUBLIC_*`) | Clave pública de acceso (restringida mediante RLS). |
+En **Supabase → Authentication → URL Configuration**:
 
-> [!CAUTION]
-> **Protección de secretos:**
-> - Jamás debe configurarse la clave `service_role` en Vercel como variable pública ni en el archivo `.env.local`.
-> - Las credenciales sintéticas de prueba (`SYNTHETIC_ADMIN_*`, etc.) son de uso exclusivo en entornos locales y jamás deben subirse al repositorio ni configurarse en producción.
+- `Site URL` debe ser el dominio de producción, actualmente `https://muro-participativo-de-ideas.vercel.app`.
+- Permitir `https://muro-participativo-de-ideas.vercel.app/**` como URL de retorno.
+- Permitir `http://localhost:3000/**` para desarrollo local.
+- Agregar cualquier dominio personalizado de producción y su URL de retorno antes de usarlo.
 
----
+Los enlaces de confirmación y recuperación usan el dominio de la solicitud y el callback `/auth/callback`. La configuración local se versiona en `supabase/config.toml`. En producción, los correos los gestiona Supabase Auth; para entrega confiable y límites adecuados, configurar y revisar un proveedor SMTP en Supabase.
 
-## 4. Estado de Migraciones y Procedimiento de Base de Datos
+## Publicar una versión
 
-### 4.1. Incertidumbre del estado de producción
-- Las migraciones `1` a `7` se encuentran confirmadas en el entorno productivo.
-- Las migraciones `20261021140000_audit_cascade_counts_v2.sql`, `20261028150000_ideas_atomic_numbering.sql` y `20261029170000_export_activity_ideas_rpc.sql` se encuentran aplicadas en la base local, pero su aplicación en producción es **ESTRICTAMENTE DESCONOCIDA** (sin telemetría comprobable).
-- Además, la migración `20261029170000` fue aplicada localmente sin constancia documental de autorización previa.
+### 1. Preparar cambios de base de datos
 
-### 4.2. Procedimiento obligatorio previo a cualquier migración productiva
-1. Vincular el CLI local al proyecto de producción correspondiente:
-   ```powershell
-   npx supabase link --project-ref <PROJECT_REF>
-   ```
-2. Inspeccionar en modo solo lectura las diferencias de migraciones:
-   ```powershell
-   npx supabase migration list
-   ```
-3. **No ejecutar `supabase db push`** sin autorización formal, respaldo verificado de la base de datos de producción y plan de contingencia documentado.
-4. **NUNCA ejecutar `supabase db reset`** contra el entorno de producción (comando reservado exclusivamente para desarrollo local con Docker).
-
----
-
-## 5. Compilación y Despliegue de la Aplicación
-
-### 5.1. Consideración técnica de compilación en Windows
-En entornos de desarrollo Windows con espacios en la ruta del repositorio (`Muro Partisiativo de Ideas`), Turbopack falla en la resolución interna de PostCSS. Para compilar y validar de manera determinista se debe utilizar el compilador nativo Webpack:
+Crear una migración para cada cambio de esquema y validarla primero contra Supabase local:
 
 ```powershell
-npx next build --webpack
+npx supabase migration new nombre_del_cambio
+npm run supabase:start
+npx supabase migration up --local
 ```
 
-### 5.2. Flujo de despliegue a producción
-1. Verificar que la rama `Dev` cuente con todas las pruebas aprobadas (`node --test tests/...`, `npx tsc --noEmit`).
-2. Resolver la sincronización de base de datos (§4).
-3. Integrar los cambios hacia `main` mediante Pull Request auditado:
-   ```powershell
-   git checkout main
-   git merge Dev --ff-only
-   git push origin main
-   ```
-4. Monitorear el despliegue automático en la consola de Vercel hasta alcanzar el estado `Ready`.
+Revisar el SQL y el estado local antes de tocar producción. Si no hay cambios de esquema pendientes, no ejecutar `db push`.
+
+### 2. Aplicar migraciones a producción cuando corresponda
+
+Vincular la carpeta local al proyecto Supabase correcto (solo la primera vez por checkout) y revisar la lista que se va a aplicar:
+
+```powershell
+npx supabase link --project-ref <project-ref>
+npx supabase migration list
+npx supabase db push
+```
+
+`db push` solicita confirmación antes de aplicar migraciones. Verificar el nombre del proyecto y cada archivo listado. Hacer cambios aditivos cuando sea posible; las migraciones de borrado o transformación requieren una estrategia de conservación/restauración de datos.
+
+### 3. Desplegar la aplicación
+
+Los cambios hacia `main` deben integrarse mediante Pull Request auditado y aprobado en GitHub, respetando las protecciones del repositorio:
+
+```powershell
+git push origin <rama-de-trabajo>
+```
+
+Tras la aprobación del Pull Request y la verificación exitosa de las comprobaciones automatizadas (checks), ejecutar la fusión en GitHub. Vercel creará el despliegue de producción desde `main`. Revisar **Vercel → Deployments** y esperar el estado **Ready**. Para ramas previas o de desarrollo, comprobar el Preview antes de integrar el cambio.
+
+## Comprobación posterior
+
+Después de cada despliegue, revisar al menos:
+
+1. La página inicial y `/ingresar` responden en el dominio de producción.
+2. El flujo de ingreso y el panel funcionan con una cuenta organizadora existente.
+3. Los correos de confirmación/recuperación retornan al dominio correcto y el callback completa el flujo.
+4. Una actividad de prueba permite enviar una idea y mostrarla según su modo de moderación.
+5. El muro público se actualiza en vivo sin mostrar email, nombre ni apellido.
+6. Los logs de Vercel y Supabase no muestran errores inesperados.
+
+No usar información personal real para las comprobaciones si una cuenta o actividad de prueba alcanza.
+
+## Fallas y vuelta atrás
+
+- Si falla una compilación, revisar los logs de Build en el deployment de Vercel; el deployment anterior Ready sigue siendo el destino público hasta que haya uno nuevo listo.
+- Si un deployment nuevo presenta errores en la app, usar la opción de Vercel para volver a promover el deployment anterior conocido como bueno y corregir el código antes de publicar de nuevo.
+- Volver atrás el código no revierte migraciones de base de datos. Las correcciones de esquema se hacen con una migración nueva. Antes de una operación destructiva, verificar que haya una copia de seguridad adecuada en Supabase.
+- No ejecutar `supabase db reset` contra producción; el reset es para el entorno local.
+
+## Entorno local
+
+La preparación de Docker, URLs locales, Supabase Studio y la bandeja de email de prueba está en el [README](../README.md#preparar-el-entorno). Las cuentas locales y los datos locales son independientes de Production.
 
 ---
 
-## 6. Lista de Verificación Posterior al Despliegue (Smoke Test)
-
-Tras cada despliegue a producción, validar obligatoriamente los 5 flujos fundamentales:
-
-1. **Ruta inicial y autenticación:** Acceder a la portada y verificar que `/ingresar` responda HTTP 200 sin errores de consola.
-2. **Panel de organizador:** Iniciar sesión con una cuenta de prueba, verificar la visualización correcta de `/panel` y abrir el detalle `/panel/actividad/[id]`.
-3. **Ergonomía y scroll del panel:** Comprobar que el detalle de actividad tenga distribución vertical fluida, scroll completo y acceso a la zona de peligro.
-4. **Participación móvil:** Abrir `/a/[code]` en un dispositivo móvil o emulador, enviar una idea de prueba y comprobar la respuesta del servidor.
-5. **Muro en tiempo real:** Proyectar `/muro/[code]` en pantalla completa y constatar que la idea ingresada se presente como destacada (8s) y luego se incorpore armónicamente a la grilla.
-
----
-
-## 7. Política Permanente de Cierre Técnico de Features y Limpieza de Ramas
+## Política permanente de cierre técnico de features y limpieza de ramas
 
 Ninguna funcionalidad o rama `feat/*` se considera completada con la mera aprobación o fusión del Pull Request. Una feature está formalmente cerrada cuando su integración y despliegue están verificados en destino (`main` o `Dev`), y todos sus artefactos temporales (ramas locales, ramas remotas y worktrees dedicados) han sido retirados de forma segura.
 
-### 7.1. Configuración de GitHub
+### Configuración de GitHub
 El repositorio tiene habilitada la directiva `delete_branch_on_merge: true`. Al fusionar un Pull Request en GitHub, la rama remota (`origin/feat/*` o `origin/promo/*`) se elimina automáticamente en el servidor. Esto **no** elimina ramas locales ni worktrees en las estaciones de trabajo.
 
-### 7.2. Procedimiento obligatorio de cierre técnico
+### Procedimiento obligatorio de cierre técnico
 Tras la fusión e integración de una rama:
 1. **Verificación del PR:** Confirmar estado `closed` y `merged: true` en GitHub.
 2. **Identificación de la rama destino:** Confirmar si el destino es `main` o `Dev`.
