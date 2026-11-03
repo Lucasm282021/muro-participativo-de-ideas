@@ -22,6 +22,9 @@
  *    - Falsos positivos por consultas Git fallidas: si falla cualquier consulta general imprescindible
  *      (worktree list, branch -a, punteros origin/main u origin/Dev), la auditoría se detiene
  *      con código distinto de cero y nunca emite inventarios incompletos.
+ *    - Falsos positivos por errores de lanzamiento de procesos: excepciones de ejecución (ENOENT, timeout,
+ *      señales o fallos sin código numérico) devuelven exitCode -1 y nunca se confunden con el código
+ *      legítimo 1 (no ancestría de merge-base).
  *
  * 2. Riesgos que requieren validación manual:
  *    - Cambios locales no commiteados en otros clones o estaciones remotas de trabajo.
@@ -43,6 +46,12 @@ const CANONICAL_TARGETS = new Set(['main', 'Dev']);
 /**
  * Ejecuta un comando de Git de forma segura y devuelve un objeto de resultado detallado.
  * No oculta errores ni convierte fallos en valores nulos indiscriminadamente.
+ *
+ * Representación inequívoca de resultados:
+ * - exitCode 0: ejecución correcta.
+ * - exitCode 1: ejecución correcta con resultado negativo cuando el comando lo documenta (ej. merge-base --is-ancestor).
+ * - exitCode > 1: código numérico real de fallo reportado por el ejecutable de Git.
+ * - exitCode -1: excepción de lanzamiento sin código numérico real (ENOENT, timeout, señal, permisos, etc.).
  */
 function gitExec(args, options = {}) {
   if (!Array.isArray(args) || args.length === 0) {
@@ -81,11 +90,15 @@ function gitExec(args, options = {}) {
       error: null
     };
   } catch (err) {
+    // Solo si el proceso hijo finalizó y reportó un código de salida numérico real:
+    const hasNumericExitStatus = typeof err.status === 'number' && Number.isInteger(err.status);
+    const exitCode = hasNumericExitStatus ? err.status : -1;
+
     return {
       ok: false,
       stdout: (err.stdout ? err.stdout.toString() : '').trim(),
-      stderr: (err.stderr ? err.stderr.toString() : '').trim(),
-      exitCode: typeof err.status === 'number' ? err.status : 1,
+      stderr: (err.stderr ? err.stderr.toString() : (err.message || 'Error de ejecución de Git')).trim(),
+      exitCode,
       error: err
     };
   }
@@ -326,11 +339,14 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
         reason: `La rama está en ancestría de ${targetRef} pero contiene ${aheadCount} commit(s) exclusivos posteriores no integrados.`
       };
     }
-  } else if (directAncRes.exitCode !== 1) {
+  } else if (directAncRes.exitCode === 1) {
+    // No es ancestro directo legítimo (resultado documentado de Git). Continúa evaluación.
+  } else {
+    // exitCode !== 0 && exitCode !== 1: error de ejecución de Git (exitCode > 1 o -1)
     return {
       integrated: false,
       mode: 'git_error',
-      error: `Error de Git en merge-base para ${targetRef}: ${directAncRes.stderr || directAncRes.error?.message}`
+      error: `Error de Git en merge-base para ${targetRef}: ${directAncRes.stderr || directAncRes.error?.message || 'código ' + directAncRes.exitCode}`
     };
   }
 
@@ -359,7 +375,7 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
       return {
         integrated: false,
         mode: 'git_error',
-        error: `Error de Git al verificar ancestría de ${mergeSha.trim().substring(0, 7)} en ${targetRef}: ${mergeShaAncRes.stderr}`
+        error: `Error de Git al verificar ancestría de ${mergeSha.trim().substring(0, 7)} en ${targetRef}: ${mergeShaAncRes.stderr || mergeShaAncRes.error?.message || 'código ' + mergeShaAncRes.exitCode}`
       };
     }
 
@@ -378,7 +394,7 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
       // Si difiere, comprobar si prHeadSha es ancestro de fullRef
       const headAncRes = customGitExec(['merge-base', '--is-ancestor', prHeadSha.trim(), fullRef]);
       if (headAncRes.exitCode === 1) {
-        // prHeadSha NO es ancestro de la rama actual: rama retrocedida o divergente
+        // prHeadSha NO es ancestro de la rama actual: rama retrocedida o divergente legítima
         return {
           integrated: false,
           mode: 'branch_behind_pr',
@@ -386,10 +402,11 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
         };
       }
       if (headAncRes.exitCode !== 0) {
+        // Error de ejecución o fallo de Git
         return {
           integrated: false,
           mode: 'git_error',
-          error: `Error de Git al verificar relación entre commit del PR (${prHeadSha.trim().substring(0, 7)}) y la rama (${currentSha.substring(0, 7)}): ${headAncRes.stderr}`
+          error: `Error de Git al verificar relación entre commit del PR (${prHeadSha.trim().substring(0, 7)}) y la rama (${currentSha.substring(0, 7)}): ${headAncRes.stderr || headAncRes.error?.message || 'código ' + headAncRes.exitCode}`
         };
       }
 
@@ -399,7 +416,7 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
         return {
           integrated: false,
           mode: 'git_error',
-          error: `Fallo al contar commits posteriores al PR (${prHeadSha.trim()}..${fullRef}): ${postCommitsRes.stderr}`
+          error: `Fallo al contar commits posteriores al PR (${prHeadSha.trim()}..${fullRef}): ${postCommitsRes.stderr || 'error de ejecución'}`
         };
       }
       const postCount = parseInt(postCommitsRes.stdout, 10);
@@ -434,7 +451,7 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
     return {
       integrated: false,
       mode: 'git_error',
-      error: `Fallo al consultar rev-list (${targetRef}..${fullRef}): ${aheadRes.stderr}`
+      error: `Fallo al consultar rev-list (${targetRef}..${fullRef}): ${aheadRes.stderr || 'error de ejecución'}`
     };
   }
   const aheadCount = parseInt(aheadRes.stdout, 10);
@@ -470,7 +487,7 @@ function verifyIntegrationEvidence(fullRef, canonicalMergedPr, targetRef, curren
       reason: `La rama difiere en contenido respecto de ${targetRef} y no tiene PR canónico fusionado.`
     };
   } else {
-    // exitCode > 1 o error de ejecución
+    // exitCode > 1 o error de ejecución (-1)
     return {
       integrated: false,
       mode: 'git_error',
@@ -593,7 +610,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
   } else if (mainAncRes.exitCode === 1) {
     inMainAncestry = false;
   } else {
-    gitQueryError = `Fallo en merge-base ${canonicalMainRef}: ${mainAncRes.stderr || mainAncRes.error?.message}`;
+    gitQueryError = `Fallo en merge-base ${canonicalMainRef}: ${mainAncRes.stderr || mainAncRes.error?.message || 'código ' + mainAncRes.exitCode}`;
   }
 
   let inDevAncestry = false;
@@ -604,7 +621,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
     } else if (devAncRes.exitCode === 1) {
       inDevAncestry = false;
     } else {
-      gitQueryError = `Fallo en merge-base ${canonicalDevRef}: ${devAncRes.stderr || devAncRes.error?.message}`;
+      gitQueryError = `Fallo en merge-base ${canonicalDevRef}: ${devAncRes.stderr || devAncRes.error?.message || 'código ' + devAncRes.exitCode}`;
     }
   }
 
@@ -619,7 +636,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
         gitQueryError = `Salida inválida en rev-list ${canonicalMainRef}: ${aheadMainRes.stdout}`;
       }
     } else {
-      gitQueryError = `Fallo en rev-list ${canonicalMainRef}: ${aheadMainRes.stderr}`;
+      gitQueryError = `Fallo en rev-list ${canonicalMainRef}: ${aheadMainRes.stderr || 'error de ejecución'}`;
     }
   }
 
@@ -632,7 +649,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
         gitQueryError = `Salida inválida en rev-list ${canonicalDevRef}: ${aheadDevRes.stdout}`;
       }
     } else {
-      gitQueryError = `Fallo en rev-list ${canonicalDevRef}: ${aheadDevRes.stderr}`;
+      gitQueryError = `Fallo en rev-list ${canonicalDevRef}: ${aheadDevRes.stderr || 'error de ejecución'}`;
     }
   }
 
@@ -643,7 +660,7 @@ function analyzeBranch(branchName, isRemote, env, customGitExec = gitExec) {
       const diffLines = diffRes.stdout.split('\n').filter(Boolean);
       diffSummary = diffLines.length > 0 ? diffLines[diffLines.length - 1].trim() : 'Sin diferencias de archivos';
     } else {
-      gitQueryError = `Fallo en diff ${canonicalMainRef}: ${diffRes.stderr}`;
+      gitQueryError = `Fallo en diff ${canonicalMainRef}: ${diffRes.stderr || 'error de ejecución'}`;
       diffSummary = 'Error al calcular diferencias';
     }
   }

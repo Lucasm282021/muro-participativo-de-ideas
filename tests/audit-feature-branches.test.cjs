@@ -967,7 +967,7 @@ async function runAllTests() {
     console.log('  ✔ Merge SHA ausente clasifica como D.');
   }
 
-  console.log('[40/40] Evidencia incompleta o prHeadSha no verificable conduce a D (Corrección D)');
+  console.log('[40/48] Evidencia incompleta o prHeadSha no verificable conduce a D (Corrección D)');
   {
     const canonicalPr = {
       id: 706,
@@ -995,8 +995,230 @@ async function runAllTests() {
     console.log('  ✔ Evidencia histórica incompleta conduce a modo unverified_head y categoría D.');
   }
 
+  // =============================================================
+  // BLOQUE 3: 8 NUEVAS PRUEBAS DE MANEJO DE ERRORES DE EJECUCIÓN (41 A 48)
+  // =============================================================
+
+  console.log('[41/48] Excepción de lanzamiento de merge-base sin err.status');
+  {
+    // Simular gitExec con una excepción que no tiene código de salida numérico
+    const launchErrorGit = (args) => {
+      const sub = args[0];
+      if (sub === 'merge-base') {
+        const err = new Error('Spawn process failed: EPERM');
+        err.status = undefined; // Sin código numérico de salida
+        return {
+          ok: false,
+          stdout: '',
+          stderr: 'Spawn process failed: EPERM',
+          exitCode: -1, // Debe reportar -1, NUNCA 1
+          error: err
+        };
+      }
+      return { ok: true, stdout: dummyMainSha, exitCode: 0 };
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', launchErrorGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error', 'Debe clasificar como git_error y nunca como no-ancestría limpia');
+    assert.notStrictEqual(res.mode, 'not_integrated');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, launchErrorGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Excepción de lanzamiento sin err.status produce exitCode -1, git_error y categoría D.');
+  }
+
+  console.log('[42/48] Ejecutable Git inexistente (ENOENT)');
+  {
+    const enoentGit = () => {
+      const err = new Error('spawn git ENOENT');
+      err.code = 'ENOENT';
+      err.status = null;
+      return {
+        ok: false,
+        stdout: '',
+        stderr: 'spawn git ENOENT',
+        exitCode: -1,
+        error: err
+      };
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', enoentGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, enoentGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / RAMA NO RESUELTA');
+    console.log('  ✔ ENOENT (git no encontrado) produce exitCode -1 y categoría D.');
+  }
+
+  console.log('[43/48] Timeout o terminación por señal (ETIMEDOUT / SIGTERM)');
+  {
+    const timeoutGit = () => {
+      const err = new Error('Process timed out');
+      err.code = 'ETIMEDOUT';
+      err.signal = 'SIGTERM';
+      err.status = null; // No hay exitCode del proceso
+      return {
+        ok: false,
+        stdout: '',
+        stderr: 'Process timed out after 10000ms',
+        exitCode: -1,
+        error: err
+      };
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/test', null, 'refs/remotes/origin/main', 'sha1', timeoutGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test', false, env, timeoutGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / RAMA NO RESUELTA');
+    console.log('  ✔ Timeout / terminación por señal tratada como error de Git y categoría D.');
+  }
+
+  console.log('[44/48] Fallo de lanzamiento durante la comprobación de ancestría de prHeadSha');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const currentSha = 'dddddddddddddddddddddddddddddddddddddddd';
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        // mergeSha ok en target
+        if (args.includes(mergeSha)) return { ok: true, stdout: '', exitCode: 0 };
+        // Al consultar prHeadSha contra la rama, ocurre fallo de lanzamiento
+        if (args.includes(prHeadSha)) {
+          return { ok: false, stdout: '', stderr: 'fatal: spawn error on prHeadSha check', exitCode: -1 };
+        }
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': () => ({ ok: true, stdout: currentSha, exitCode: 0 })
+    });
+
+    const canonicalPr = {
+      id: 801,
+      number: 801,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/test-pr-head-err', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/test-pr-head-err', canonicalPr, 'refs/remotes/origin/main', currentSha, mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+    assert(res.error.includes('fatal: spawn error on prHeadSha check'));
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test-pr-head-err', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Fallo en verificación de prHeadSha produce git_error y categoría D (nunca branch_behind_pr).');
+  }
+
+  console.log('[45/48] Fallo de lanzamiento durante la comprobación de merge_commit_sha');
+  {
+    const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
+
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes(mergeSha)) {
+          return { ok: false, stdout: '', stderr: 'fatal: I/O error checking merge_commit_sha', exitCode: -1 };
+        }
+        return { ok: false, stdout: '', exitCode: 1 };
+      },
+      'rev-parse': () => ({ ok: true, stdout: prHeadSha, exitCode: 0 })
+    });
+
+    const canonicalPr = {
+      id: 802,
+      number: 802,
+      state: 'closed',
+      merged_at: '2026-11-01T12:00:00Z',
+      merge_commit_sha: mergeSha,
+      base: { ref: 'main' },
+      head: { ref: 'feat/test-merge-sha-err', sha: prHeadSha, repo: { full_name: CANONICAL_REPO } }
+    };
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/test-merge-sha-err', canonicalPr, 'refs/remotes/origin/main', prHeadSha, mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'git_error');
+    assert(res.error.includes('fatal: I/O error checking merge_commit_sha'));
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [canonicalPr] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/test-merge-sha-err', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    console.log('  ✔ Fallo en comprobación de merge_commit_sha produce git_error y categoría D.');
+  }
+
+  console.log('[46/48] Fallo de lanzamiento durante las comprobaciones de analyzeBranch()');
+  {
+    const mockGit = createMockGit({
+      'merge-base': (args) => {
+        if (args.includes('refs/remotes/origin/main') || args.includes('refs/remotes/origin/Dev')) {
+          return { ok: false, stdout: '', stderr: 'fatal: git died unexpectedly', exitCode: -1 };
+        }
+        return { ok: false, stdout: '', exitCode: 1 };
+      }
+    });
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/branch-anc-err', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'D');
+    assert.strictEqual(analysis.recommendation, 'DETENER / ERROR EN CONSULTA GIT');
+    assert(analysis.rationale.includes('git died unexpectedly'));
+    console.log('  ✔ Fallo en consultas generales de analyzeBranch() activa gitQueryError y categoría D.');
+  }
+
+  console.log('[47/48] Confirmación de que una no-ancestría real con código 1 sigue tratándose correctamente');
+  {
+    const mockGit = createMockGit({
+      'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }), // Código real 1 documentado
+      'rev-list': () => ({ ok: true, stdout: '3', exitCode: 0 })
+    });
+
+    const res = verifyIntegrationEvidence('refs/heads/feat/real-not-anc', null, 'refs/remotes/origin/main', 'sha1', mockGit);
+    assert.strictEqual(res.integrated, false);
+    assert.strictEqual(res.mode, 'not_integrated', 'Código 1 legítimo debe resultar en not_integrated, no en git_error');
+
+    const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+    const analysis = analyzeBranch('feat/real-not-anc', false, env, mockGit);
+    assert.strictEqual(analysis.category, 'C'); // Trabajo activo pendiente
+    console.log('  ✔ Código real 1 tratado legítimamente como no-ancestría sin generar git_error.');
+  }
+
+  console.log('[48/48] Confirmación de que NINGÚN error de ejecución puede producir categoría [A]');
+  {
+    const errorCodes = [-1, 2, 128, 255];
+    for (const code of errorCodes) {
+      const mockGit = createMockGit({
+        'merge-base': () => ({ ok: false, stdout: '', stderr: `error with exitCode ${code}`, exitCode: code }),
+        'diff': (args) => {
+          if (args.includes('--quiet')) return { ok: true, stdout: '', exitCode: 0 }; // Árbol supuestamente idéntico
+          return { ok: true, stdout: '', exitCode: 0 };
+        }
+      });
+
+      const env = { currentBranch: 'other', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
+      const analysis = analyzeBranch('feat/guaranteed-safe', false, env, mockGit);
+      assert.notStrictEqual(analysis.category, 'A', `Error de ejecución (exitCode ${code}) NUNCA debe permitir categoría A`);
+      assert.strictEqual(analysis.category, 'D', `Error de ejecución (exitCode ${code}) debe forzar categoría D`);
+    }
+    console.log('  ✔ Verificación absoluta: ningún error de ejecución produce categoría A.');
+  }
+
   console.log('\n===============================================================');
-  console.log(' RESULTADO: 40/40 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
+  console.log(' RESULTADO: 48/48 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
   console.log('===============================================================');
 }
 
