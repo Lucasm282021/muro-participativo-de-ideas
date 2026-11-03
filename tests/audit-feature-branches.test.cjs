@@ -78,7 +78,7 @@ async function runAllTests() {
   // BLOQUE 1: PRUEBAS PREVIAS 1 A 26
   // =============================================================
 
-  console.log('[1/40] Paginación completa dentro del límite');
+  console.log('[1/54] Paginación completa dentro del límite');
   {
     const fakeFetch = async (url) => {
       const match = url.match(/[?&]page=(\d+)/);
@@ -98,7 +98,7 @@ async function runAllTests() {
     console.log('  ✔ Paginación completada correctamente (142 PRs, 2 páginas).');
   }
 
-  console.log('[2/40] Límite de 50 páginas sin final confirmado');
+  console.log('[2/54] Límite de 50 páginas sin final confirmado');
   {
     const fakeFetch = async () => ({
       ok: true,
@@ -112,7 +112,7 @@ async function runAllTests() {
     console.log('  ✔ Límite alcanzado devuelve pagination_error.');
   }
 
-  console.log('[3/40] Precedencia 1: git credential fill');
+  console.log('[3/54] Precedencia 1: git credential fill');
   {
     const mockGit = createMockGit({
       'credential': (args, opts) => {
@@ -128,7 +128,7 @@ async function runAllTests() {
     console.log('  ✔ git credential fill tiene precedencia 1.');
   }
 
-  console.log('[4/40] Precedencia 2: GITHUB_TOKEN en ausencia de git credential fill');
+  console.log('[4/54] Precedencia 2: GITHUB_TOKEN en ausencia de git credential fill');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -139,7 +139,7 @@ async function runAllTests() {
     console.log('  ✔ GITHUB_TOKEN tiene precedencia 2.');
   }
 
-  console.log('[5/40] Precedencia 3: GH_TOKEN en ausencia de GITHUB_TOKEN y git credential');
+  console.log('[5/54] Precedencia 3: GH_TOKEN en ausencia de GITHUB_TOKEN y git credential');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -150,7 +150,7 @@ async function runAllTests() {
     console.log('  ✔ GH_TOKEN tiene precedencia 3.');
   }
 
-  console.log('[6/40] Ausencia total de credenciales');
+  console.log('[6/54] Ausencia total de credenciales');
   {
     const mockGit = createMockGit({
       'credential': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -163,7 +163,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de credenciales produce estado explícito no_token.');
   }
 
-  console.log('[7/40] PR de repositorio externo / fork con mismo nombre de rama');
+  console.log('[7/54] PR de repositorio externo / fork con mismo nombre de rama');
   {
     const mockGit = createMockGit();
     const env = {
@@ -190,7 +190,7 @@ async function runAllTests() {
     console.log('  ✔ PR de fork externo detectado y clasificado en [D].');
   }
 
-  console.log('[8/40] PR de repositorio canónico verificado');
+  console.log('[8/54] PR de repositorio canónico verificado');
   {
     const mockGit = createMockGit();
     const env = {
@@ -216,7 +216,7 @@ async function runAllTests() {
     console.log('  ✔ PR canónico asociado correctamente.');
   }
 
-  console.log('[9/40] Merge normal completamente integrado');
+  console.log('[9/54] Merge normal completamente integrado');
   {
     const mockGit = createMockGit({
       'merge-base': (args) => {
@@ -239,7 +239,7 @@ async function runAllTests() {
     console.log('  ✔ Merge normal completamente integrado clasifica en [A].');
   }
 
-  console.log('[10/40] Squash merge completamente integrado');
+  console.log('[10/54] Squash merge completamente integrado');
   {
     const branchSha = '3333333333333333333333333333333333333333';
     const mergeSha = '4444444444444444444444444444444444444444';
@@ -284,7 +284,7 @@ async function runAllTests() {
     console.log('  ✔ Squash merge limpio clasifica en [A].');
   }
 
-  console.log('[11/40] Squash con commits posteriores a la fusión');
+  console.log('[11/54] Squash con commits posteriores a la fusión');
   {
     const oldPrHeadSha = '3333333333333333333333333333333333333333';
     const newBranchSha = '5555555555555555555555555555555555555555';
@@ -335,7 +335,7 @@ async function runAllTests() {
     console.log('  ✔ Squash con commits posteriores clasifica en [D].');
   }
 
-  console.log('[12/40] Merge normal con commits posteriores a la fusión');
+  console.log('[12/54] Merge normal con commits posteriores a la fusión');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
@@ -354,7 +354,7 @@ async function runAllTests() {
     console.log('  ✔ Merge con commits posteriores clasifica en [D].');
   }
 
-  console.log('[13/40] Árboles equivalentes con historias divergentes (aheadCount = 0)');
+  console.log('[13/54] Árboles equivalentes con historias divergentes (aheadCount = 0)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -377,7 +377,7 @@ async function runAllTests() {
     console.log('  ✔ Árbol idéntico sin commits pendientes clasifica en [A].');
   }
 
-  console.log('[14/40] Promoción verificada en Dev');
+  console.log('[14/54] Promoción verificada en Dev');
   {
     const mockGit = createMockGit({
       'merge-base': (args) => {
@@ -402,7 +402,7 @@ async function runAllTests() {
     console.log('  ✔ Promoción verificada en Dev clasifica en [A].');
   }
 
-  console.log('[15/40] Contenido residual real (commits no integrados)');
+  console.log('[15/54] Contenido residual real (commits no integrados)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -421,7 +421,7 @@ async function runAllTests() {
     console.log('  ✔ Contenido residual activo clasifica en [C].');
   }
 
-  console.log('[16/40] PR fusionado sin merge_commit_sha');
+  console.log('[16/54] PR fusionado sin merge_commit_sha');
   {
     const mockGit = createMockGit();
     const env = {
@@ -448,7 +448,7 @@ async function runAllTests() {
     console.log('  ✔ PR sin merge_commit_sha clasifica en [D].');
   }
 
-  console.log('[17/40] Commit de integración no contenido en destino');
+  console.log('[17/54] Commit de integración no contenido en destino');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 })
@@ -477,7 +477,7 @@ async function runAllTests() {
     console.log('  ✔ Commit de integración ausente en destino clasifica en [D].');
   }
 
-  console.log('[18/40] Error de Git al consultar ancestría');
+  console.log('[18/54] Error de Git al consultar ancestría');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', stderr: 'fatal: error reading object', exitCode: 128 })
@@ -495,7 +495,7 @@ async function runAllTests() {
     console.log('  ✔ Error de Git en ancestría detiene recomendación y clasifica en [D].');
   }
 
-  console.log('[19/40] Ausencia obligatoria de origin/main');
+  console.log('[19/54] Ausencia obligatoria de origin/main');
   {
     const mockGit = createMockGit();
     const env = {
@@ -511,7 +511,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de origin/main detiene análisis en [D].');
   }
 
-  console.log('[20/40] Ausencia obligatoria de origin/Dev');
+  console.log('[20/54] Ausencia obligatoria de origin/Dev');
   {
     const mockGit = createMockGit();
     const env = {
@@ -527,7 +527,7 @@ async function runAllTests() {
     console.log('  ✔ Ausencia de origin/Dev detiene análisis en [D].');
   }
 
-  console.log('[21/40] Error al listar worktrees');
+  console.log('[21/54] Error al listar worktrees');
   {
     const mockGit = createMockGit({
       'worktree': () => ({ ok: false, stdout: '', stderr: 'fatal: corrupt worktree list', exitCode: 128 })
@@ -538,7 +538,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en worktree list detectado correctamente.');
   }
 
-  console.log('[22/40] Error al listar ramas');
+  console.log('[22/54] Error al listar ramas');
   {
     const mockGit = createMockGit({
       'branch': (args) => {
@@ -552,7 +552,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en branch -a detectado correctamente.');
   }
 
-  console.log('[23/40] Error al identificar rama activa');
+  console.log('[23/54] Error al identificar rama activa');
   {
     const mockGit = createMockGit({
       'branch': (args) => {
@@ -566,7 +566,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en branch --show-current detectado correctamente.');
   }
 
-  console.log('[24/40] Nombre de rama con caracteres inválidos');
+  console.log('[24/54] Nombre de rama con caracteres inválidos');
   {
     const mockGit = createMockGit();
     const env = { currentBranch: 'main', githubResult: { status: 'success', prs: [] }, worktreeEntries: [], mainSha: dummyMainSha, devSha: dummyDevSha };
@@ -576,7 +576,7 @@ async function runAllTests() {
     console.log('  ✔ Caracteres especiales interceptados preventivamente.');
   }
 
-  console.log('[25/40] Protección de rama activa en sesión');
+  console.log('[25/54] Protección de rama activa en sesión');
   {
     const mockGit = createMockGit();
     const env = {
@@ -592,7 +592,7 @@ async function runAllTests() {
     console.log('  ✔ Rama activa en uso protegida con [C].');
   }
 
-  console.log('[26/40] Consulta de GitHub incompleta (interrupción por red o auth)');
+  console.log('[26/54] Consulta de GitHub incompleta (interrupción por red o auth)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 })
@@ -614,7 +614,7 @@ async function runAllTests() {
   // BLOQUE 2: 14 NUEVAS PRUEBAS ESPECÍFICAS DE SEGURIDAD (27 A 40)
   // =============================================================
 
-  console.log('[27/40] rev-list falla durante la verificación (Corrección A)');
+  console.log('[27/54] rev-list falla durante la verificación (Corrección A)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
@@ -632,7 +632,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en rev-list resulta en modo git_error y categoría D.');
   }
 
-  console.log('[28/40] rev-list devuelve salida inválida (no numérica) (Corrección A)');
+  console.log('[28/54] rev-list devuelve salida inválida (no numérica) (Corrección A)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: true, stdout: '', exitCode: 0 }),
@@ -649,7 +649,7 @@ async function runAllTests() {
     console.log('  ✔ Salida inválida de rev-list detectada y clasificada como D.');
   }
 
-  console.log('[29/40] diff --quiet devuelve 0 (árboles iguales) (Corrección B)');
+  console.log('[29/54] diff --quiet devuelve 0 (árboles iguales) (Corrección B)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -670,7 +670,7 @@ async function runAllTests() {
     console.log('  ✔ diff --quiet con código 0 valida equivalent_tree y categoría A.');
   }
 
-  console.log('[30/40] diff --quiet devuelve 1 (árboles diferentes) (Corrección B)');
+  console.log('[30/54] diff --quiet devuelve 1 (árboles diferentes) (Corrección B)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -691,7 +691,7 @@ async function runAllTests() {
     console.log('  ✔ diff --quiet con código 1 clasifica como not_integrated y categoría D.');
   }
 
-  console.log('[31/40] diff --quiet devuelve código superior a 1 (Corrección B)');
+  console.log('[31/54] diff --quiet devuelve código superior a 1 (Corrección B)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -713,7 +713,7 @@ async function runAllTests() {
     console.log('  ✔ diff --quiet con código > 1 tratado como error de Git y categoría D.');
   }
 
-  console.log('[32/40] Error de ejecución de diff (excepción o fallo de proceso) (Corrección B)');
+  console.log('[32/54] Error de ejecución de diff (excepción o fallo de proceso) (Corrección B)');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }),
@@ -731,7 +731,7 @@ async function runAllTests() {
     console.log('  ✔ Error de ejecución de diff conduce de inmediato a categoría D.');
   }
 
-  console.log('[33/40] Rama retrocedida respecto del prHeadSha (Corrección C)');
+  console.log('[33/54] Rama retrocedida respecto del prHeadSha (Corrección C)');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; // Commit más antiguo
@@ -775,7 +775,7 @@ async function runAllTests() {
     console.log('  ✔ Rama retrocedida respecto al PR clasificada en modo branch_behind_pr y categoría D.');
   }
 
-  console.log('[34/40] Rama en sincronía exacta con prHeadSha y mergeSha en target (Corrección C)');
+  console.log('[34/54] Rama en sincronía exacta con prHeadSha y mergeSha en target (Corrección C)');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
@@ -814,7 +814,7 @@ async function runAllTests() {
     console.log('  ✔ Rama en sincronía con PR validada en squash_merge y categoría A.');
   }
 
-  console.log('[35/40] Commits posteriores a la fusión detectados (Corrección C)');
+  console.log('[35/54] Commits posteriores a la fusión detectados (Corrección C)');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentSha = 'dddddddddddddddddddddddddddddddddddddddd';
@@ -856,7 +856,7 @@ async function runAllTests() {
     console.log('  ✔ Commits posteriores detectados en modo post_merge_commits y categoría D.');
   }
 
-  console.log('[36/40] Árbol equivalente con commits exclusivos no integrados (Corrección D)');
+  console.log('[36/54] Árbol equivalente con commits exclusivos no integrados (Corrección D)');
   {
     // Supongamos que diff --quiet devolvería 0, pero aheadCount es 2 y NO hay PR
     const mockGit = createMockGit({
@@ -879,7 +879,7 @@ async function runAllTests() {
     console.log('  ✔ Árbol idéntico con commits exclusivos bloquea categoría A y clasifica como C.');
   }
 
-  console.log('[37/40] Árbol equivalente con consulta de commits fallida (Corrección D)');
+  console.log('[37/54] Árbol equivalente con consulta de commits fallida (Corrección D)');
   {
     // diff --quiet devolvería 0, pero rev-list falló
     const mockGit = createMockGit({
@@ -902,7 +902,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en rev-list impide que equivalent_tree clasifique erróneamente en A.');
   }
 
-  console.log('[38/40] Merge SHA válido pero contenido residual (Corrección D)');
+  console.log('[38/54] Merge SHA válido pero contenido residual (Corrección D)');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentSha = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
@@ -944,7 +944,7 @@ async function runAllTests() {
     console.log('  ✔ Merge SHA en target con commits residuales clasifica como D.');
   }
 
-  console.log('[39/40] Merge SHA ausente (null o cadena vacía) (Corrección D)');
+  console.log('[39/54] Merge SHA ausente (null o cadena vacía) (Corrección D)');
   {
     const canonicalPr = {
       id: 705,
@@ -967,7 +967,7 @@ async function runAllTests() {
     console.log('  ✔ Merge SHA ausente clasifica como D.');
   }
 
-  console.log('[40/48] Evidencia incompleta o prHeadSha no verificable conduce a D (Corrección D)');
+  console.log('[40/54] Evidencia incompleta o prHeadSha no verificable conduce a D (Corrección D)');
   {
     const canonicalPr = {
       id: 706,
@@ -999,7 +999,7 @@ async function runAllTests() {
   // BLOQUE 3: 8 NUEVAS PRUEBAS DE MANEJO DE ERRORES DE EJECUCIÓN (41 A 48)
   // =============================================================
 
-  console.log('[41/48] Excepción de lanzamiento de merge-base sin err.status');
+  console.log('[41/54] Excepción de lanzamiento de merge-base sin err.status');
   {
     // Simular gitExec con una excepción que no tiene código de salida numérico
     const launchErrorGit = (args) => {
@@ -1030,7 +1030,7 @@ async function runAllTests() {
     console.log('  ✔ Excepción de lanzamiento sin err.status produce exitCode -1, git_error y categoría D.');
   }
 
-  console.log('[42/48] Ejecutable Git inexistente (ENOENT)');
+  console.log('[42/54] Ejecutable Git inexistente (ENOENT)');
   {
     const enoentGit = () => {
       const err = new Error('spawn git ENOENT');
@@ -1056,7 +1056,7 @@ async function runAllTests() {
     console.log('  ✔ ENOENT (git no encontrado) produce exitCode -1 y categoría D.');
   }
 
-  console.log('[43/48] Timeout o terminación por señal (ETIMEDOUT / SIGTERM)');
+  console.log('[43/54] Timeout o terminación por señal (ETIMEDOUT / SIGTERM)');
   {
     const timeoutGit = () => {
       const err = new Error('Process timed out');
@@ -1083,7 +1083,7 @@ async function runAllTests() {
     console.log('  ✔ Timeout / terminación por señal tratada como error de Git y categoría D.');
   }
 
-  console.log('[44/48] Fallo de lanzamiento durante la comprobación de ancestría de prHeadSha');
+  console.log('[44/54] Fallo de lanzamiento durante la comprobación de ancestría de prHeadSha');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentSha = 'dddddddddddddddddddddddddddddddddddddddd';
@@ -1124,7 +1124,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en verificación de prHeadSha produce git_error y categoría D (nunca branch_behind_pr).');
   }
 
-  console.log('[45/48] Fallo de lanzamiento durante la comprobación de merge_commit_sha');
+  console.log('[45/54] Fallo de lanzamiento durante la comprobación de merge_commit_sha');
   {
     const prHeadSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const mergeSha = 'cccccccccccccccccccccccccccccccccccccccc';
@@ -1161,7 +1161,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en comprobación de merge_commit_sha produce git_error y categoría D.');
   }
 
-  console.log('[46/48] Fallo de lanzamiento durante las comprobaciones de analyzeBranch()');
+  console.log('[46/54] Fallo de lanzamiento durante las comprobaciones de analyzeBranch()');
   {
     const mockGit = createMockGit({
       'merge-base': (args) => {
@@ -1180,7 +1180,7 @@ async function runAllTests() {
     console.log('  ✔ Fallo en consultas generales de analyzeBranch() activa gitQueryError y categoría D.');
   }
 
-  console.log('[47/48] Confirmación de que una no-ancestría real con código 1 sigue tratándose correctamente');
+  console.log('[47/54] Confirmación de que una no-ancestría real con código 1 sigue tratándose correctamente');
   {
     const mockGit = createMockGit({
       'merge-base': () => ({ ok: false, stdout: '', exitCode: 1 }), // Código real 1 documentado
@@ -1197,7 +1197,7 @@ async function runAllTests() {
     console.log('  ✔ Código real 1 tratado legítimamente como no-ancestría sin generar git_error.');
   }
 
-  console.log('[48/48] Confirmación de que NINGÚN error de ejecución puede producir categoría [A]');
+  console.log('[48/54] Confirmación de que NINGÚN error de ejecución puede producir categoría [A]');
   {
     const errorCodes = [-1, 2, 128, 255];
     for (const code of errorCodes) {
@@ -1217,8 +1217,129 @@ async function runAllTests() {
     console.log('  ✔ Verificación absoluta: ningún error de ejecución produce categoría A.');
   }
 
+
+  // =============================================================
+  // BLOQUE 4: COBERTURA DIRECTA DE gitExec() REAL (PRUEBAS 49 A 54)
+  // =============================================================
+
+  const repoRoot = path.resolve(__dirname, '..');
+
+  console.log('[49/54] Excepción sin err.status: gitExec() real devuelve exitCode: -1');
+  {
+    // A. Argumentos vacíos / no válidos
+    const resEmpty = gitExec([]);
+    assert.strictEqual(resEmpty.ok, false);
+    assert.strictEqual(resEmpty.exitCode, -1);
+    assert.strictEqual(typeof resEmpty.stderr, 'string');
+    assert(resEmpty.error instanceof Error);
+    assert.notStrictEqual(resEmpty.exitCode, 1, 'Excepción sin err.status jamás debe ser código 1');
+
+    // B. Subcomando denegado
+    const resDisallowed = gitExec(['push', 'origin', 'main']);
+    assert.strictEqual(resDisallowed.ok, false);
+    assert.strictEqual(resDisallowed.exitCode, -1);
+    assert.notStrictEqual(resDisallowed.exitCode, 1);
+
+    // C. CWD inexistente provocando excepción en execFileSync sin código de salida del proceso
+    const nonexistentCwd = path.join(repoRoot, 'nonexistent_test_dir_gitexec_status_check');
+    const resCwd = gitExec(['rev-parse', 'HEAD'], { cwd: nonexistentCwd });
+    assert.strictEqual(resCwd.ok, false);
+    assert.strictEqual(resCwd.exitCode, -1);
+    assert.strictEqual(resCwd.error.status, null);
+    assert.notStrictEqual(resCwd.exitCode, 1, 'Fallo de lanzamiento de proceso no debe convertirse en código 1');
+    console.log('  ✔ gitExec() real devuelve exitCode: -1 ante excepciones sin err.status.');
+  }
+
+  console.log('[50/54] Ejecutable inexistente (ENOENT): gitExec() real no convierte la excepción en código 1');
+  {
+    const emptyPath = path.join(repoRoot, 'empty_dir_no_git_binary_test');
+    const resEnoent = gitExec(['rev-parse', 'HEAD'], { env: { ...process.env, PATH: emptyPath } });
+    assert.strictEqual(resEnoent.ok, false);
+    assert.strictEqual(resEnoent.exitCode, -1);
+    assert.strictEqual(resEnoent.error.code, 'ENOENT');
+    assert.notStrictEqual(resEnoent.exitCode, 1, 'ENOENT NUNCA debe convertirse en código 1 de no-ancestría');
+    assert(resEnoent.stderr.includes('ENOENT') || resEnoent.error.message.includes('ENOENT'));
+    console.log('  ✔ gitExec() real preserva error ENOENT y asigna exitCode -1 sin confundirlo con código 1.');
+  }
+
+  console.log('[51/54] Timeout o terminación por señal: gitExec() real clasifica la excepción como error');
+  {
+    const resTimeout = gitExec(['rev-list', '--count', 'HEAD'], { timeout: 1 });
+    assert.strictEqual(resTimeout.ok, false);
+    assert.strictEqual(resTimeout.exitCode, -1);
+    assert.strictEqual(resTimeout.error.code, 'ETIMEDOUT');
+    assert.notStrictEqual(resTimeout.exitCode, 1, 'Timeout NUNCA debe convertirse en código 1');
+    console.log('  ✔ gitExec() real clasifica timeout como error de ejecución con exitCode -1.');
+  }
+
+  console.log('[52/54] Código real 1: ejecución legítima de Git conserva código 1 y no se transforma en -1');
+  {
+    // HEAD no es ancestro de HEAD~1 en este repositorio (HEAD es su descendiente)
+    const resExit1 = gitExec(['merge-base', '--is-ancestor', 'HEAD', 'HEAD~1'], { cwd: repoRoot });
+    assert.strictEqual(resExit1.ok, false);
+    assert.strictEqual(resExit1.exitCode, 1, 'El código legítimo 1 de no-ancestría debe conservarse intacto');
+    assert.strictEqual(resExit1.error.status, 1);
+    assert.notStrictEqual(resExit1.exitCode, -1, 'El código legítimo 1 no debe convertirse en -1');
+    console.log('  ✔ gitExec() real conserva legítimamente exitCode 1 sin alterarlo.');
+  }
+
+  console.log('[53/54] Código real mayor que 1: conserva el código numérico reportado por Git y clasifica como error');
+  {
+    // rev-parse de referencia inexistente produce código 128
+    const resExit128 = gitExec(['rev-parse', '--verify', 'refs/heads/nonexistent_test_branch_999999'], { cwd: repoRoot });
+    assert.strictEqual(resExit128.ok, false);
+    assert.strictEqual(resExit128.exitCode, 128, 'El código numérico 128 debe conservarse intacto');
+    assert.strictEqual(resExit128.error.status, 128);
+    assert.notStrictEqual(resExit128.exitCode, -1);
+    assert.notStrictEqual(resExit128.exitCode, 1);
+    assert(resExit128.stderr.includes('fatal:'));
+    console.log('  ✔ gitExec() real conserva código de error numérico de Git (>1) y marca ok: false.');
+  }
+
+  console.log('[54/54] Separación inequívoca: resultados de excepciones (-1) y códigos reales (1) no son intercambiables');
+  {
+    const emptyPath = path.join(repoRoot, 'empty_dir_no_git_binary_test');
+    const resEnoent = gitExec(['rev-parse', 'HEAD'], { env: { ...process.env, PATH: emptyPath } });
+    const resExit1 = gitExec(['merge-base', '--is-ancestor', 'HEAD', 'HEAD~1'], { cwd: repoRoot });
+
+    // 1. Verificación a nivel de códigos primitivos de gitExec
+    assert.notStrictEqual(resEnoent.exitCode, resExit1.exitCode);
+    assert.strictEqual(resEnoent.exitCode, -1);
+    assert.strictEqual(resExit1.exitCode, 1);
+    assert.strictEqual(resEnoent.ok, false);
+    assert.strictEqual(resExit1.ok, false);
+
+    // 2. Verificación de comportamiento en la lógica de decisión:
+    // Una excepción de lanzamiento forzada con gitExec conduce indefectiblemente a git_error
+    const resFromException = verifyIntegrationEvidence(
+      'refs/heads/docs/feature-lifecycle-policy',
+      null,
+      'refs/remotes/origin/main',
+      '9d5b5f475c801c316cb945508bf5e7ac31a68a60',
+      () => resEnoent
+    );
+    assert.strictEqual(resFromException.integrated, false);
+    assert.strictEqual(resFromException.mode, 'git_error');
+
+    // Una ejecución real de Git evaluando la rama contra origin/main (sin PR fusionado)
+    // procesa el código 1 como evaluación normal de no-ancestría y no genera git_error
+    const realGitExecWithCwd = (args) => gitExec(args, { cwd: repoRoot });
+    const resFromRealGit = verifyIntegrationEvidence(
+      'refs/heads/docs/feature-lifecycle-policy',
+      null,
+      'refs/remotes/origin/main',
+      '9d5b5f475c801c316cb945508bf5e7ac31a68a60',
+      realGitExecWithCwd
+    );
+    assert.strictEqual(resFromRealGit.integrated, false);
+    assert.notStrictEqual(resFromRealGit.mode, 'git_error', 'Ejecución real con código legítimo 1 no debe producir git_error');
+    assert.strictEqual(resFromRealGit.mode, 'not_integrated');
+    assert.notStrictEqual(resFromException.mode, resFromRealGit.mode, 'Los modos git_error y not_integrated son estrictamente disjuntos');
+    console.log('  ✔ Separación inequívoca demostrada: las excepciones y los códigos reales 1 operan por vías completamente disjuntas.');
+  }
+
   console.log('\n===============================================================');
-  console.log(' RESULTADO: 48/48 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
+  console.log(' RESULTADO: 54/54 PRUEBAS EJECUTADAS Y SUPERADAS CON ÉXITO');
   console.log('===============================================================');
 }
 
