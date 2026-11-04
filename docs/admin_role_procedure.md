@@ -12,6 +12,11 @@
 
 Este documento establece el procedimiento técnico y administrativo para la asignación, verificación, auditoría y revocación del rol `admin_global` en la base de datos del Muro Participativo de Ideas.
 
+El kit operativo de infraestructura se compone de tres herramientas versionadas en el directorio `scripts/admin/`:
+1. `scripts/admin/check_admin_baseline.sql`: Auditoría y preflight no destructivo de solo lectura para comprobar el esquema, enumerar administradores activos y calcular la huella (*admin_fingerprint*).
+2. `scripts/admin/assign_admin_global.sql`: Procedimiento transaccional de alta atómica con guardas defensivas y comprobación de precondiciones.
+3. `scripts/admin/revoke_admin_global.sql`: Procedimiento transaccional de revocación segura y acotada con verificación de impacto unitario.
+
 Aplica exclusivamente al personal autorizado con acceso a la consola de infraestructura (Supabase SQL Editor / CLI con credenciales administrativas directas). **Bajo ninguna circunstancia este procedimiento debe exponerse como un servicio web, endpoint API ni Server Action accesible desde la aplicación.**
 
 ---
@@ -65,26 +70,36 @@ En la base de datos, el control de acceso a roles está protegido por las siguie
 ## 5. Procedimiento de Alta (Asignación de `admin_global`)
 
 ### Precondiciones
-- Solicitud formal aprobada.
+- Solicitud formal aprobada según la matriz de separación de responsabilidades (§2).
 - Cuenta del usuario creada y confirmada en `auth.users`.
 - Acceso del operador a la consola administrativa de Supabase (SQL Editor protegido).
+- Ejecución previa satisfactoria del diagnóstico de línea base.
 
 ### Pasos de ejecución
-1. Abrir la consola administrativa SQL.
-2. Cargar la plantilla transaccional parametrizada `scripts/admin/assign_admin_global.sql`.
-3. Sustituir el marcador de posición del correo electrónico por el correo institucional formal del usuario objetivo.
-4. Ejecutar el bloque transaccional atómico (`BEGIN ... COMMIT`).
-5. El bloque realiza las siguientes comprobaciones defensivas automáticas:
+1. **Preflight obligatorio (inspección de línea base):**
+   - Abrir la consola administrativa SQL.
+   - Ejecutar el script de solo lectura `scripts/admin/check_admin_baseline.sql`.
+   - Confirmar que los componentes del esquema existan (`table_exists = true`, `function_exists = true`), revisar el listado actual de administradores y registrar el conteo (`admin_count`) previo a la operación.
+2. **Carga del script de alta:**
+   - Cargar la plantilla transaccional parametrizada `scripts/admin/assign_admin_global.sql`.
+3. **Parametrización segura:**
+   - Sustituir el marcador de posición obligatorio `PLACEHOLDER_USER_EMAIL` por el correo institucional formal del usuario objetivo.
+4. **Ejecución atómica:**
+   - Ejecutar el bloque transaccional (`DO $$ ... $$;`).
+   - El bloque cuenta con una guarda obligatoria que aborta la transacción si no se reemplaza el marcador de posición `PLACEHOLDER_USER_EMAIL`.
+5. **Comprobaciones defensivas integradas:**
    - Valida que exista exactamente un usuario en `auth.users` con el correo indicado. Si no existe o hay ambigüedad, aborta (`RAISE EXCEPTION`).
    - Valida que el usuario no posea ya el rol `admin_global`. Si ya lo posee, aborta con mensaje informativo.
    - Inserta la fila en `public.user_roles (user_id, role) VALUES (target_user_id, 'admin_global')`.
-6. Confirmar la asignación ejecutando la consulta de verificación:
-   ```sql
-   SELECT ur.user_id, u.email, ur.role, ur.created_at
-   FROM public.user_roles ur
-   JOIN auth.users u ON u.id = ur.user_id
-   WHERE u.email = 'usuario.objetivo@institucion.gob.ar';
-   ```
+6. **Verificación posterior:**
+   - Confirmar la asignación ejecutando la consulta de verificación:
+     ```sql
+     SELECT ur.user_id, u.email, ur.role, ur.created_at
+     FROM public.user_roles ur
+     JOIN auth.users u ON u.id = ur.user_id
+     WHERE u.email = 'usuario.objetivo@institucion.gob.ar';
+     ```
+   - Opcionalmente, reejecutar `scripts/admin/check_admin_baseline.sql` para corroborar el incremento neto de 1 administrador en `admin_count` y la nueva huella criptográfica.
 
 ---
 
@@ -92,36 +107,33 @@ En la base de datos, el control de acceso a roles está protegido por las siguie
 
 La baja de un administrador debe ejecutarse inmediatamente ante cambio de funciones, renuncia o sospecha de compromiso:
 
+### Precondiciones
+- Solicitud o reporte formal de baja o revocación.
+- Verificación previa del estado actual mediante `scripts/admin/check_admin_baseline.sql`.
+- Acceso a la consola administrativa SQL de Supabase.
+
 ### Pasos de ejecución
-1. Ejecutar en la consola administrativa el siguiente bloque de revocación:
-   ```sql
-   DO $$
-   DECLARE
-     v_target_email text := 'usuario.objetivo@institucion.gob.ar'; -- Correo a revocar
-     v_user_id uuid;
-     v_deleted_count int;
-   BEGIN
-     SELECT id INTO v_user_id
-     FROM auth.users
-     WHERE lower(email) = lower(trim(v_target_email));
-
-     IF v_user_id IS NULL THEN
-       RAISE EXCEPTION 'Usuario no encontrado en auth.users con correo %', v_target_email;
-     END IF;
-
+1. **Carga del script de revocación:**
+   - Cargar la plantilla transaccional parametrizada `scripts/admin/revoke_admin_global.sql`.
+2. **Parametrización segura:**
+   - Sustituir el marcador obligatorio `PLACEHOLDER_USER_EMAIL` por el correo del usuario al que se revocarán los privilegios:
+     ```sql
+     c_target_email CONSTANT text := 'PLACEHOLDER_USER_EMAIL';
+     ```
+3. **Ejecución y salvaguardas:**
+   - Ejecutar el bloque transaccional (`DO $$ ... $$;`).
+   - El script aborta inmediatamente si el marcador `PLACEHOLDER_USER_EMAIL` no fue sustituido.
+   - Valida que el correo exista en `auth.users`. Si no se localiza la cuenta, aborta con excepción.
+   - Realiza un borrado acotado exclusivamente al rol `admin_global` de ese usuario específico:
+     ```sql
      DELETE FROM public.user_roles
      WHERE user_id = v_user_id AND role = 'admin_global';
-
-     GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
-
-     IF v_deleted_count = 0 THEN
-       RAISE NOTICE 'El usuario no poseía el rol admin_global.';
-     ELSE
-       RAISE NOTICE 'Rol admin_global revocado exitosamente para el usuario % (ID: %).', v_target_email, v_user_id;
-     END IF;
-   END $$;
-   ```
-2. **Efecto inmediato en la aplicación:** Dado que `checkAdminAuthorization` consulta `is_admin()` en tiempo real contra la base de datos sin cachear privilegios en JWT, la revocación surte efecto de forma instantánea en la siguiente interacción del usuario.
+     ```
+   - Inspecciona `GET DIAGNOSTICS v_deleted_count = ROW_COUNT` y emite notificación diagnóstica confirmando la revocación efectiva o avisando si el usuario no contaba con el rol.
+4. **Verificación posterior:**
+   - Ejecutar nuevamente `scripts/admin/check_admin_baseline.sql` para confirmar la disminución del conteo administrativo y la consistencia del esquema.
+5. **Efecto inmediato en la aplicación:**
+   - Dado que `checkAdminAuthorization` consulta `is_admin()` en tiempo real contra la base de datos sin cachear privilegios en JWT (`fail-closed`), la revocación surte efecto de forma instantánea en la siguiente interacción o solicitud del usuario.
 
 ---
 

@@ -376,6 +376,123 @@ test("consistencia arquitectónica: procedimiento alineado con esquema relaciona
 });
 
 // ============================================================================
+// REM-04: Kit de scripts de mantenimiento administrativo (HAL-CONSOL-03)
+// ============================================================================
+
+test("REM-04: integridad y seguridad del kit completo de scripts en scripts/admin", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const assignPath = path.resolve("scripts/admin/assign_admin_global.sql");
+  const checkPath = path.resolve("scripts/admin/check_admin_baseline.sql");
+  const revokePath = path.resolve("scripts/admin/revoke_admin_global.sql");
+  const docPath = path.resolve("docs/admin_role_procedure.md");
+
+  // 1. Existencia física de los tres scripts y la documentación
+  const [assignSql, checkSql, revokeSql, docContent] = await Promise.all([
+    fs.readFile(assignPath, "utf-8"),
+    fs.readFile(checkPath, "utf-8"),
+    fs.readFile(revokePath, "utf-8"),
+    fs.readFile(docPath, "utf-8"),
+  ]);
+
+  // 2. Comprobación de ausencia absoluta de tokens sensibles y credenciales reales
+  const sensitiveTokens = [
+    /sbp_[a-zA-Z0-9_-]+/,
+    /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9._-]+/,
+    /service_role_key/i,
+  ];
+
+  for (const tokenRegex of sensitiveTokens) {
+    assert.doesNotMatch(assignSql, tokenRegex, "assign_admin_global.sql no debe contener tokens sensibles");
+    assert.doesNotMatch(checkSql, tokenRegex, "check_admin_baseline.sql no debe contener tokens sensibles");
+    assert.doesNotMatch(revokeSql, tokenRegex, "revoke_admin_global.sql no debe contener tokens sensibles");
+    assert.doesNotMatch(docContent, tokenRegex, "docs/admin_role_procedure.md no debe contener tokens sensibles");
+  }
+
+  // 3. Marcador de posición obligatorio en scripts parametrizados
+  assert.match(
+    assignSql,
+    /c_target_email\s+CONSTANT\s+text\s*:=\s*'PLACEHOLDER_USER_EMAIL'/,
+    "assign_admin_global.sql debe definir PLACEHOLDER_USER_EMAIL",
+  );
+  assert.match(
+    revokeSql,
+    /c_target_email\s+CONSTANT\s+text\s*:=\s*'PLACEHOLDER_USER_EMAIL'/,
+    "revoke_admin_global.sql debe definir PLACEHOLDER_USER_EMAIL",
+  );
+
+  // 4. Guardas obligatorias contra ejecución accidental
+  assert.match(
+    assignSql,
+    /IF\s+c_target_email\s*=\s*'PLACEHOLDER_USER_EMAIL'/,
+    "assign_admin_global.sql debe abortar si el placeholder no se reemplaza",
+  );
+  assert.match(
+    revokeSql,
+    /IF\s+c_target_email\s*=\s*'PLACEHOLDER_USER_EMAIL'/,
+    "revoke_admin_global.sql debe abortar si el placeholder no se reemplaza",
+  );
+
+  // 5. check_admin_baseline.sql: Restricciones de solo lectura
+  const mutatingClauses = [
+    /\bINSERT\s+INTO\b/i,
+    /\bUPDATE\s+[a-zA-Z_]/i,
+    /\bDELETE\s+FROM\b/i,
+    /\bDROP\s+[a-zA-Z_]/i,
+    /\bALTER\s+[a-zA-Z_]/i,
+    /\bTRUNCATE\b/i,
+  ];
+  for (const clause of mutatingClauses) {
+    assert.doesNotMatch(
+      checkSql,
+      clause,
+      `check_admin_baseline.sql debe ser de solo lectura y no contener cláusulas mutantes (${clause})`,
+    );
+  }
+
+  // 6. check_admin_baseline.sql: Componentes clave de auditoría de línea base
+  assert.match(checkSql, /count\(\*\)\s+AS\s+admin_count/i, "check_admin_baseline.sql debe contar admin_count");
+  assert.match(checkSql, /admin_fingerprint/i, "check_admin_baseline.sql debe calcular admin_fingerprint");
+  assert.match(checkSql, /to_regclass\('public\.user_roles'\)/i, "check_admin_baseline.sql debe verificar user_roles con to_regclass");
+  assert.match(checkSql, /to_regprocedure\('public\.is_admin\(\)'\)/i, "check_admin_baseline.sql debe verificar is_admin() con to_regprocedure");
+});
+
+test("REM-04: script de revocación con alcance acotado y comprobación atómica", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const revokePath = path.resolve("scripts/admin/revoke_admin_global.sql");
+  const revokeSql = await fs.readFile(revokePath, "utf-8");
+
+  // Validación de usuario en auth.users antes de operar
+  assert.match(
+    revokeSql,
+    /SELECT\s+id\s+INTO\s+v_user_id\s+FROM\s+auth\.users/i,
+    "revoke_admin_global.sql debe resolver el UUID del usuario desde auth.users",
+  );
+
+  // Eliminación estrictamente acotada a user_roles y rol 'admin_global'
+  assert.match(
+    revokeSql,
+    /DELETE\s+FROM\s+public\.user_roles\s+WHERE\s+user_id\s*=\s*v_user_id\s+AND\s+role\s*=\s*'admin_global'/i,
+    "El borrado debe restringirse a user_id y role admin_global",
+  );
+
+  // Verificación atómica de filas afectadas
+  assert.match(
+    revokeSql,
+    /GET\s+DIAGNOSTICS\s+v_deleted_count\s*=\s*ROW_COUNT/i,
+    "Debe capturar el número de filas afectadas",
+  );
+  assert.match(
+    revokeSql,
+    /IF\s+v_deleted_count\s*<>\s*1\s+THEN/i,
+    "Debe abortar si el número de filas revocadas es distinto de 1",
+  );
+});
+
+// ============================================================================
 // Auditoría administrativa v2 — cobertura estática
 // ============================================================================
 // R97 afirmó haber añadido estas comprobaciones, pero el archivo no las
