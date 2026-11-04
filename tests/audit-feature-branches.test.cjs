@@ -1345,40 +1345,55 @@ async function runAllTests() {
     const resEnoent = gitExec(['rev-parse', 'HEAD'], { env: { ...process.env, PATH: emptyPath } });
     const resExit1 = gitExec(['merge-base', '--is-ancestor', 'HEAD', 'HEAD~1'], { cwd: repoRoot });
 
-    // 1. Verificación a nivel de códigos primitivos de gitExec
-    assert.notStrictEqual(resEnoent.exitCode, resExit1.exitCode);
-    assert.strictEqual(resEnoent.exitCode, -1);
-    assert.strictEqual(resExit1.exitCode, 1);
-    assert.strictEqual(resEnoent.ok, false);
+    const resExit0 = gitExec(['merge-base', '--is-ancestor', 'HEAD~1', 'HEAD'], { cwd: repoRoot });
+    const resExit128 = gitExec(['rev-parse', '--verify', 'refs/heads/nonexistent_test_branch_999999'], { cwd: repoRoot });
+
+    // 1. Verificación a nivel de códigos primitivos de gitExec (Matriz de 4 códigos)
+    assert.strictEqual(resExit0.exitCode, 0, 'Código 0 de ancestría confirmada');
+    assert.strictEqual(resExit1.exitCode, 1, 'Código 1 de no-ancestría legítima');
+    assert.strictEqual(resExit128.exitCode, 128, 'Código 128 de error fatal de Git');
+    assert.strictEqual(resEnoent.exitCode, -1, 'Código -1 de excepción o fallo de lanzamiento');
+
+    assert.strictEqual(resExit0.ok, true);
     assert.strictEqual(resExit1.ok, false);
+    assert.strictEqual(resExit128.ok, false);
+    assert.strictEqual(resEnoent.ok, false);
+
+    assert.notStrictEqual(resEnoent.exitCode, resExit1.exitCode);
+    assert.notStrictEqual(resExit128.exitCode, resExit1.exitCode);
+    assert.notStrictEqual(resExit128.exitCode, resEnoent.exitCode);
 
     // 2. Verificación de comportamiento en la lógica de decisión:
-    // Una excepción de lanzamiento forzada con gitExec conduce indefectiblemente a git_error
-    const resFromException = verifyIntegrationEvidence(
-      'refs/heads/docs/feature-lifecycle-policy',
-      null,
-      'refs/remotes/origin/main',
-      '9d5b5f475c801c316cb945508bf5e7ac31a68a60',
-      () => resEnoent
-    );
+    const realGitExecWithCwd = (args) => gitExec(args, { cwd: repoRoot });
+
+    // 2a. Código 0: relación de ancestro confirmada en verifyIntegrationEvidence
+    const resFromCode0 = verifyIntegrationEvidence('HEAD~1', null, 'HEAD', 'dummy_sha', realGitExecWithCwd);
+    assert.strictEqual(resFromCode0.integrated, true);
+    assert.strictEqual(resFromCode0.mode, 'normal_merge');
+
+    // 2b. Código 1: evaluación de dos commits válidos donde no existe relación de ancestro
+    // HEAD es descendiente de HEAD~1, por lo que merge-base --is-ancestor HEAD HEAD~1 devuelve 1 legítimo
+    const resFromCode1 = verifyIntegrationEvidence('HEAD', null, 'HEAD~1', 'dummy_sha', realGitExecWithCwd);
+    assert.strictEqual(resFromCode1.integrated, false);
+    assert.notStrictEqual(resFromCode1.mode, 'git_error', 'Ejecución real con código legítimo 1 no debe producir git_error');
+    assert.strictEqual(resFromCode1.mode, 'not_integrated');
+
+    // 2c. Código 128: error fatal de Git (debe clasificarse como git_error y NUNCA como not_integrated)
+    const resFromFatal = verifyIntegrationEvidence('HEAD', null, 'HEAD~1', 'dummy_sha', () => resExit128);
+    assert.strictEqual(resFromFatal.integrated, false);
+    assert.strictEqual(resFromFatal.mode, 'git_error');
+    assert.notStrictEqual(resFromFatal.mode, 'not_integrated', 'Error fatal (128) jamás debe tratarse como rama no integrada');
+
+    // 2d. Código -1: excepción de lanzamiento forzada con gitExec conduce indefectiblemente a git_error
+    const resFromException = verifyIntegrationEvidence('HEAD', null, 'HEAD~1', 'dummy_sha', () => resEnoent);
     assert.strictEqual(resFromException.integrated, false);
     assert.strictEqual(resFromException.mode, 'git_error');
+    assert.notStrictEqual(resFromException.mode, 'not_integrated', 'Excepción (-1) jamás debe tratarse como rama no integrada');
 
-    // Una ejecución real de Git evaluando la rama contra origin/main (sin PR fusionado)
-    // procesa el código 1 como evaluación normal de no-ancestría y no genera git_error
-    const realGitExecWithCwd = (args) => gitExec(args, { cwd: repoRoot });
-    const resFromRealGit = verifyIntegrationEvidence(
-      'refs/heads/docs/feature-lifecycle-policy',
-      null,
-      'refs/remotes/origin/main',
-      '9d5b5f475c801c316cb945508bf5e7ac31a68a60',
-      realGitExecWithCwd
-    );
-    assert.strictEqual(resFromRealGit.integrated, false);
-    assert.notStrictEqual(resFromRealGit.mode, 'git_error', 'Ejecución real con código legítimo 1 no debe producir git_error');
-    assert.strictEqual(resFromRealGit.mode, 'not_integrated');
-    assert.notStrictEqual(resFromException.mode, resFromRealGit.mode, 'Los modos git_error y not_integrated son estrictamente disjuntos');
-    console.log('  ✔ Separación inequívoca demostrada: las excepciones y los códigos reales 1 operan por vías completamente disjuntas.');
+    // Disyunción estricta de modos
+    assert.notStrictEqual(resFromException.mode, resFromCode1.mode, 'Los modos git_error y not_integrated son estrictamente disjuntos');
+    assert.notStrictEqual(resFromFatal.mode, resFromCode1.mode, 'Los errores fatales (128) y no_integrated (1) son estrictamente disjuntos');
+    console.log('  ✔ Separación inequívoca demostrada: matriz de 4 códigos (0, 1, 128, -1) validada y modos estrictamente disjuntos.');
   }
 
   console.log('\n===============================================================');
