@@ -220,9 +220,13 @@ Realizada el 08/10/2026 salvo donde se indica:
 | Acceso desde LAN | Rutas `/a/…` y `/muro/…` y `/_next/*` responden 200 desde `192.168.1.12`; requests con `Origin` cross-origin a `/_next/*` responden 403 (`allowedDevOrigins` sin configurar); Server Actions responden OK desde LAN | Disponibilidad básica desde la red local, no en teléfono |
 | Inspección de código de todas las decisiones de §3 y §6 | Coincidencia con lo aprobado | Sólo lectura |
 | Auditoría de ramas y política Git (`tests/audit-feature-branches.test.cjs`) | ✅ 54/54 PASS, exit 0 (2026-11-04) | Verificación de políticas y ciclo de vida de ramas. Resolución de hallazgo REM-01 (desacoplamiento de prueba 54 respecto de ramas transitorias y evaluación de matriz de códigos 0, 1, 128 y -1 mediante PR #10, merge `9dbdd68`). Ver ficha canónica `docs/auditorias/2026-11-04-cierre-rem-01-desacoplamiento-test-54.md`. |
+| Diagnóstico de Realtime y filtrado de eventos (`live-wall.tsx` / `panel-live-refresh.tsx`) | ⚠️ PARCIALMENTE CONFIRMADO (2026-11-04) | Auditoría de hallazgo REM-02. Suscripción sin filtro en servidor y discriminación en cliente conservada por estabilidad operativa. Sin intervención inmediata en código. Relegado a optimización futura de escalabilidad (P2). Ver ficha canónica `docs/auditorias/2026-11-04-cierre-rem-02-realtime.md`. |
 
 > **Nota de actualización técnica (2026-11-04 — Remediación REM-01 / PR #10):**
 > Se integró formalmente en `main` (`9dbdd6874b585719f26549093aff4dc52e624b66`) la resolución del hallazgo REM-01 mediante el PR #10, desacoplando la prueba 54 de `tests/audit-feature-branches.test.cjs` de la rama transitoria `docs/feature-lifecycle-policy` y de condiciones particulares de `origin/main`. La prueba combina ejecuciones reales de Git (códigos 0, 1, 128 y -1) con inyección de resultados para verificar la clasificación lógica de errores en `verifyIntegrationEvidence`. La suite específica sobre `main` certifica 54/54 PASS (código de salida 0). La suite general previa consolidó 131 PASS, 0 FAIL y 1 BLOCKED (`tests/submit-idea-dynamic.test.mjs` continúa bloqueada por credenciales sintéticas no aprovisionadas en Supabase local). La suite general completa no se volvió a ejecutar tras la fusión del PR #10. Documentado en detalle en `docs/auditorias/2026-11-04-cierre-rem-01-desacoplamiento-test-54.md`.
+
+> **Nota de actualización técnica (2026-11-04 — Diagnóstico REM-02 / Realtime):**
+> Se completó la auditoría técnica de solo lectura sobre el hallazgo REM-02 (filtrado de eventos Realtime en `live-wall.tsx` y `panel-live-refresh.tsx`). Estado: **PARCIALMENTE CONFIRMADO**. Decisión: **sin intervención inmediata sobre el código**; se conserva la implementación actual (filtrado $O(1)$ en cliente y triple mecanismo de reconciliación exclusivo del muro público —al conectar, periódico y en foco—) para evitar el riesgo de regresión en la entrega de eventos observado históricamente en el stack local (ver §8.2). Prioridad futura: optimización de escalabilidad (P2). Condición para reconsiderar: pruebas controladas en Supabase Cloud con concurrencia multiactividad, moderación a oculto y eliminación. Documentado en detalle en `docs/auditorias/2026-11-04-cierre-rem-02-realtime.md`.
 
 ### 8.2 Validado manualmente
 
@@ -313,7 +317,7 @@ Criterio transversal: el mensaje de éxito debe reflejar el estado real de la id
 
 ### P2 — escalabilidad y mejoras
 
-Cursor de presentación compartido para múltiples pantallas sincronizadas (sólo si el producto lo exige) · paginación del panel sobre >1000 filas · `aria-live` adaptado al flujo de presentación · virtualización de la grilla si las métricas lo piden · política para colas muy grandes (acelerar vs indicador; nunca descartar).
+Cursor de presentación compartido para múltiples pantallas sincronizadas (sólo si el producto lo exige) · paginación del panel sobre >1000 filas · `aria-live` adaptado al flujo de presentación · virtualización de la grilla si las métricas lo piden · política para colas muy grandes (acelerar vs indicador; nunca descartar) · evaluación de filtros de servidor en Supabase Realtime bajo concurrencia multiactividad (REM-02).
 
 ### Fuera de alcance del MVP
 
